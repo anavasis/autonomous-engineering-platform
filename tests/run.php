@@ -19,9 +19,11 @@ $testFiles = [
     __DIR__ . '/Application/ExecutionServiceTest.php',
     __DIR__ . '/Application/ProjectCommandServiceTest.php',
     __DIR__ . '/Application/GitServiceTest.php',
+    __DIR__ . '/Application/MissionEngineTest.php',
     __DIR__ . '/Infrastructure/JsonFileMissionRepositoryTest.php',
     __DIR__ . '/Infrastructure/JsonFileProjectRepositoryTest.php',
     __DIR__ . '/Infrastructure/GitCliAdapterTest.php',
+    __DIR__ . '/Infrastructure/MissionEngineRepositoryTest.php',
 ];
 
 $passed = 0;
