@@ -26,6 +26,8 @@ $testFiles = [
     __DIR__ . '/Infrastructure/MissionEngineRepositoryTest.php',
     __DIR__ . '/Infrastructure/Execution/SshExecutorTest.php',
     __DIR__ . '/Infrastructure/Execution/OpenSshCommandRunnerTest.php',
+    __DIR__ . '/Application/Workflow/WorkflowDslTest.php',
+    __DIR__ . '/Infrastructure/Workflow/JsonFileWorkflowLibraryTest.php',
 ];
 
 $passed = 0;
