@@ -1,0 +1,36 @@
+---
+description: AEP repository context — mandatory for all agent work
+alwaysApply: true
+---
+
+# AEP context (always applied)
+
+You are working in **anavasis/autonomous-engineering-platform**, the independent **Autonomous Engineering Platform (AEP)** repository.
+
+## Mandatory pre-read
+
+Before any edit, commit, or scoped work, read:
+
+1. `AGENTS.md`
+2. `docs/agent-context/PROJECT.md`
+3. `docs/agent-context/STATE.md`
+4. `docs/agent-context/DECISIONS.md`
+5. `docs/architecture/AEP-ARCHITECTURE.md`
+
+Confirm the current approved task in `STATE.md`. Do not invent tasks.
+
+## Hard constraints
+
+- **Option D (Greenfield Repository)** — independent repo; not a P1/StudyMentor/CIP fork.
+- **No P1 import. No StudyMentor copy. No CIP source import.**
+- **CIP** = external target only (protected references).
+- **Inspection-first** — inspect before implement.
+- **Strict change control** — only approved-task artifacts.
+- **Secrets** — never commit credentials or keys.
+- **WordPress Mission Control** — UI/approval boundary only; **no shell** and **no Git** execution from WordPress; not an executor host.
+- Do **not** implement ORCH-R1 until authorized after **ORCH-R1 INSPECTION**.
+- Do **not** add runtime code, PHP, Composer, workflows, tests, DBs, migrations, WordPress code, or executors unless a later approved task explicitly allows it.
+
+## If scope would expand beyond the approved task
+
+**STOP.** Report the reason. Do not continue.
