@@ -13,10 +13,13 @@ $testFiles = [
     __DIR__ . '/Domain/MissionLifecycleTest.php',
     __DIR__ . '/Domain/MissionInvariantsTest.php',
     __DIR__ . '/Domain/MissionEventsTest.php',
+    __DIR__ . '/Domain/ProjectLifecycleTest.php',
     __DIR__ . '/Application/MissionCommandServiceTest.php',
     __DIR__ . '/Application/ValidationPipelineTest.php',
     __DIR__ . '/Application/ExecutionServiceTest.php',
+    __DIR__ . '/Application/ProjectCommandServiceTest.php',
     __DIR__ . '/Infrastructure/JsonFileMissionRepositoryTest.php',
+    __DIR__ . '/Infrastructure/JsonFileProjectRepositoryTest.php',
 ];
 
 $passed = 0;
