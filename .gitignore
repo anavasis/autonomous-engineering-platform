@@ -1,0 +1,54 @@
+# Secrets and credentials — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.secret
+*.secrets
+credentials.json
+secrets/
+.secrets/
+
+# Local agent / IDE noise
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Runtime / build — not part of documentation baseline
+vendor/
+node_modules/
+composer.lock
+composer.phar
+vendor/
+dist/
+build/
+out/
+coverage/
+.phpunit.result.cache
+*.log
+tmp/
+temp/
+.cache/
+
+# Database and local data
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+dump.sql
