@@ -15,6 +15,7 @@ $testFiles = [
     __DIR__ . '/Domain/MissionEventsTest.php',
     __DIR__ . '/Application/MissionCommandServiceTest.php',
     __DIR__ . '/Application/ValidationPipelineTest.php',
+    __DIR__ . '/Application/ExecutionServiceTest.php',
     __DIR__ . '/Infrastructure/JsonFileMissionRepositoryTest.php',
 ];
 
