@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * ORCH-R3 native test runner.
+ * Native verification runner (ORCH-R3 + ORCH-R4 persistence tests).
  *
  * Usage: php tests/run.php
  */
@@ -14,6 +14,7 @@ $testFiles = [
     __DIR__ . '/Domain/MissionInvariantsTest.php',
     __DIR__ . '/Domain/MissionEventsTest.php',
     __DIR__ . '/Application/MissionCommandServiceTest.php',
+    __DIR__ . '/Infrastructure/JsonFileMissionRepositoryTest.php',
 ];
 
 $passed = 0;
@@ -23,9 +24,13 @@ $failures = [];
 foreach ($testFiles as $file) {
     require_once $file;
     $base = basename($file, '.php');
-    $class = str_contains($file, '/Application/')
-        ? 'Tests\\Application\\' . $base
-        : 'Tests\\Domain\\' . $base;
+    if (str_contains($file, '/Application/')) {
+        $class = 'Tests\\Application\\' . $base;
+    } elseif (str_contains($file, '/Infrastructure/')) {
+        $class = 'Tests\\Infrastructure\\' . $base;
+    } else {
+        $class = 'Tests\\Domain\\' . $base;
+    }
 
     $instance = new $class();
     $methods = get_class_methods($instance);
@@ -61,5 +66,5 @@ if ($failed > 0) {
     exit(1);
 }
 
-echo 'ORCH-R3 verification suite OK' . PHP_EOL;
+echo 'Verification suite OK' . PHP_EOL;
 exit(0);

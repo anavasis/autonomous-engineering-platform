@@ -53,6 +53,36 @@ final class Mission
         return $mission;
     }
 
+    /**
+     * Restore a Mission from a persistence snapshot.
+     * Does not emit domain events or execute transitions.
+     */
+    public static function reconstitute(
+        MissionId $id,
+        TargetRepositoryRef $target,
+        MissionBrief $brief,
+        ActorRef $createdBy,
+        string $createdAtUtc,
+        MissionState $state,
+        ?ScopePolicy $scopePolicy = null,
+        ?InspectionFindings $inspectionFindings = null,
+        ?ApprovalRecord $inspectionApproval = null,
+        ?ApprovalRecord $commitApproval = null,
+        ?ValidationResult $lastValidationResult = null
+    ): self {
+        $createdAtUtc = self::requireUtc($createdAtUtc, 'createdAtUtc');
+        $mission = new self($id, $target, $brief, $createdBy, $createdAtUtc);
+        $mission->state = $state;
+        $mission->scopePolicy = $scopePolicy;
+        $mission->inspectionFindings = $inspectionFindings;
+        $mission->inspectionApproval = $inspectionApproval;
+        $mission->commitApproval = $commitApproval;
+        $mission->lastValidationResult = $lastValidationResult;
+        $mission->recordedEvents = [];
+
+        return $mission;
+    }
+
     public function id(): MissionId
     {
         return $this->id;
