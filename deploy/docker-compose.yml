@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
     environment:
       AEP_DATA_ROOT: /var/aep/data
-      AEP_VERSION: "0.4.0"
+      AEP_VERSION: "0.5.0"
       AEP_BOOTSTRAP_ADMIN_USERNAME: ${AEP_BOOTSTRAP_ADMIN_USERNAME:-admin}
       AEP_BOOTSTRAP_ADMIN_PASSWORD: ${AEP_BOOTSTRAP_ADMIN_PASSWORD:-changeme}
       AEP_BOOTSTRAP_ADMIN_DISPLAY: ${AEP_BOOTSTRAP_ADMIN_DISPLAY:-AEP Administrator}

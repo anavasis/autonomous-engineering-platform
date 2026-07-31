@@ -1,0 +1,22 @@
+{
+  "providers": [
+    {
+      "id": "heuristic-local",
+      "type": "heuristic-local",
+      "enabled": true,
+      "displayName": "Heuristic Local Review"
+    },
+    {
+      "id": "cursor-review",
+      "type": "stub-review",
+      "enabled": true,
+      "displayName": "Cursor Review"
+    },
+    {
+      "id": "codex-review",
+      "type": "stub-review",
+      "enabled": true,
+      "displayName": "Codex Review"
+    }
+  ]
+}

@@ -408,7 +408,7 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.4.0',
+                'version' => '0.5.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
@@ -417,12 +417,189 @@ final class HttpKernel
                     'autonomousMissionExecution' => true,
                     'engineeringExecutionProviders' => true,
                     'engineeringWorkspaces' => true,
+                    'codeReviewPatchPipeline' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
                 'execution' => $this->app->execution()->settings(),
                 'workspaces' => $this->app->workspaces()->settings(),
+                'patches' => $this->app->patches()->settings(),
             ]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/patches') {
+            JsonResponse::send([
+                'settings' => $this->app->patches()->settings(),
+                'reviewProviders' => $this->app->patches()->listReviewProviders(),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/patches') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['settings' => $this->app->patches()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/patches') {
+            $missionId = isset($_GET['missionId']) && is_string($_GET['missionId']) ? $_GET['missionId'] : null;
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            $mergeReady = null;
+            if (isset($_GET['mergeReady'])) {
+                $mergeReady = $_GET['mergeReady'] === '1' || $_GET['mergeReady'] === 'true';
+            }
+            JsonResponse::send(['items' => $this->app->patches()->list($missionId, $status, $mergeReady)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/reviews/queue') {
+            JsonResponse::send(['items' => $this->app->patches()->reviewQueue()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->patches()->get($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Patch not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)/diff$#', $path, $m) === 1) {
+            $item = $this->app->patches()->diff($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Patch not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)/manifest$#', $path, $m) === 1) {
+            $item = $this->app->patches()->manifest($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Patch not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)/checks$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->patches()->checks($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)/reviews$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->patches()->reviews($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)/timeline$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->patches()->timeline($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/patches/([A-Za-z0-9_-]+)/readiness$#', $path, $m) === 1) {
+            $item = $this->app->patches()->readiness($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Patch not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/patches') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $missionId = (string) ($body['missionId'] ?? '');
+            $runId = (string) ($body['runId'] ?? 'run_manual');
+            $diff = (string) ($body['diff'] ?? '');
+            if ($missionId === '' || $diff === '') {
+                throw new \InvalidArgumentException('missionId and diff are required.');
+            }
+            $patch = $this->app->patchPipeline()->createFromExecution(
+                $missionId,
+                $runId,
+                $diff,
+                isset($body['sessionId']) && is_string($body['sessionId']) ? $body['sessionId'] : null,
+                isset($body['workspaceId']) && is_string($body['workspaceId']) ? $body['workspaceId'] : null,
+            );
+            JsonResponse::send($patch->toArray(), 201);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/patches/([A-Za-z0-9_-]+)/checks/run$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->patchPipeline()->runPipeline($m[1])->toArray());
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/patches/([A-Za-z0-9_-]+)/reviews/request$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->patchPipeline()->runPipeline($m[1])->toArray());
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/patches/([A-Za-z0-9_-]+)/approve$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::APPROVER);
+            $body = $this->jsonBody();
+            $summary = is_string($body['summary'] ?? null) ? (string) $body['summary'] : 'Approved by human';
+            JsonResponse::send($this->app->patchPipeline()->humanApprove($m[1], $user->username(), $summary)->toArray());
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/patches/([A-Za-z0-9_-]+)/reject$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::APPROVER);
+            $body = $this->jsonBody();
+            $summary = is_string($body['summary'] ?? null) ? (string) $body['summary'] : 'Rejected';
+            $requestChanges = ($body['requestChanges'] ?? false) === true;
+            JsonResponse::send($this->app->patchPipeline()->humanReject($m[1], $user->username(), $summary, $requestChanges)->toArray());
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/patches/([A-Za-z0-9_-]+)/seal$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->patchPipeline()->seal($m[1])->toArray());
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/patches$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->patches()->list($m[1])]);
 
             return;
         }
