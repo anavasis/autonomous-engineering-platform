@@ -1,0 +1,70 @@
+{
+  "agents": [
+    {
+      "id": "agt_architect_default",
+      "displayName": "Default Architect",
+      "role": "architect",
+      "enabled": true,
+      "capabilities": ["architecture", "php"],
+      "preferredProviders": ["local-agent"],
+      "costWeight": 1.1,
+      "confidencePrior": 0.8,
+      "maxConcurrency": 2
+    },
+    {
+      "id": "agt_implementer_default",
+      "displayName": "Default Implementer",
+      "role": "implementer",
+      "enabled": true,
+      "capabilities": ["php", "react", "database"],
+      "preferredProviders": ["local-agent"],
+      "costWeight": 1.0,
+      "confidencePrior": 0.75,
+      "maxConcurrency": 3
+    },
+    {
+      "id": "agt_reviewer_default",
+      "displayName": "Default Reviewer",
+      "role": "reviewer",
+      "enabled": true,
+      "capabilities": ["testing", "security"],
+      "preferredProviders": ["local-agent"],
+      "costWeight": 0.9,
+      "confidencePrior": 0.85,
+      "maxConcurrency": 2
+    },
+    {
+      "id": "agt_qa_default",
+      "displayName": "Default QA",
+      "role": "qa",
+      "enabled": true,
+      "capabilities": ["testing", "deployment"],
+      "preferredProviders": ["local-agent"],
+      "costWeight": 1.0,
+      "confidencePrior": 0.8,
+      "maxConcurrency": 2
+    },
+    {
+      "id": "agt_docs_default",
+      "displayName": "Default Documentation",
+      "role": "documentation",
+      "enabled": true,
+      "capabilities": ["documentation"],
+      "preferredProviders": ["local-agent"],
+      "costWeight": 0.8,
+      "confidencePrior": 0.7,
+      "maxConcurrency": 2
+    },
+    {
+      "id": "agt_security_default",
+      "displayName": "Default Security",
+      "role": "security",
+      "enabled": true,
+      "capabilities": ["security"],
+      "preferredProviders": ["local-agent"],
+      "costWeight": 1.2,
+      "confidencePrior": 0.85,
+      "maxConcurrency": 1
+    }
+  ]
+}

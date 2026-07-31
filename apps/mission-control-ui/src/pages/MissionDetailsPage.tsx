@@ -13,6 +13,7 @@ import {
   useMissionWorkspace,
   usePatches,
   useMissionMemory,
+  useMissionAssignments,
   useTimeline,
   useValidation,
 } from '@/api/hooks';
@@ -69,6 +70,7 @@ export function MissionDetailsPage() {
   const missionWorkspace = useMissionWorkspace(missionId);
   const missionPatches = usePatches(missionId);
   const missionMemory = useMissionMemory(missionId);
+  const missionAssignments = useMissionAssignments(missionId);
   const [tab, setTab] = useState<(typeof TABS)[number]>('summary');
   const [selectedEvent, setSelectedEvent] = useState<Record<string, unknown> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -200,7 +202,20 @@ export function MissionDetailsPage() {
               <tr><td>Target</td><td className="aep-mono">{JSON.stringify(m.target)}</td></tr>
               <tr><td>Project</td><td>{m.projectId ? String(m.projectId) : '—'}</td></tr>
               <tr><td>Created</td><td className="aep-mono">{String(m.createdAtUtc)}</td></tr>
-              <tr><td>Assigned agent</td><td>Unassigned (future)</td></tr>
+              <tr>
+                <td>Assigned agent</td>
+                <td>
+                  {(missionAssignments.data?.items ?? []).length === 0 ? (
+                    'Unassigned'
+                  ) : (
+                    <span className="aep-mono">
+                      {(missionAssignments.data?.items ?? [])
+                        .map((a) => `${String(a.agentId)} (${String(a.role)} · ${String(a.status)})`)
+                        .join('; ')}
+                    </span>
+                  )}
+                </td>
+              </tr>
               <tr><td>Execution provider</td><td className="aep-mono">{missionExecution.data?.session ? String(missionExecution.data.session.providerId) : 'legacy / none'}</td></tr>
               <tr><td>Validation</td><td>{m.validation ? JSON.stringify(m.validation) : '—'}</td></tr>
             </tbody>

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Aep\Infrastructure\MissionControl;
 
+use Aep\Application\Agent\Policy\AgentPolicyFactory;
+use Aep\Application\Agent\Service\AgentCoordinator;
+use Aep\Application\Agent\Service\AgentQueryService;
+use Aep\Application\Agent\Service\AgentRouter;
 use Aep\Application\Artifact\ArtifactService;
 use Aep\Application\CodeReview\Policy\PatchPolicyFactory;
 use Aep\Application\CodeReview\Service\ChangeManifestBuilder;
@@ -72,6 +76,10 @@ use Aep\Application\MissionExecution\Service\ParameterExtractor;
 use Aep\Application\MissionExecution\Service\WorkflowSelector;
 use Aep\Application\Project\ProjectCommandService;
 use Aep\Application\Validation\ValidationPipeline;
+use Aep\Infrastructure\Agent\Adapter\AgentAssignmentAdapter;
+use Aep\Infrastructure\Agent\Registry\ConfigAgentRegistry;
+use Aep\Infrastructure\Agent\Store\FilesystemAgentStore;
+use Aep\Infrastructure\Agent\Store\JsonAgentSettingsStore;
 use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
 use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
 use Aep\Infrastructure\CodeReview\Adapter\PatchCreationAdapter;
@@ -141,9 +149,10 @@ final class MissionControlKernel
     private KnowledgeQueryService $knowledgeQuery;
     private KnowledgeCaptureService $knowledgeCapture;
     private PlanningQueryService $planningQuery;
+    private AgentQueryService $agentQuery;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.7.0')
+    public function __construct(string $dataRoot, string $version = '0.8.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -163,6 +172,7 @@ final class MissionControlKernel
         $patchesDir = $this->dataRoot . '/patches';
         $knowledgeDir = $this->dataRoot . '/knowledge';
         $planningDir = $this->dataRoot . '/planning';
+        $agentsDir = $this->dataRoot . '/agents';
 
         foreach ([
             $missionsDir,
@@ -178,6 +188,7 @@ final class MissionControlKernel
             $patchesDir,
             $knowledgeDir,
             $planningDir,
+            $agentsDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -385,6 +396,15 @@ final class MissionControlKernel
         $criticalPath = new CriticalPathAnalyzer();
         $programPlanner = new ProgramPlanner($deps, $estimates, $criticalPath, $programStore);
         $replanner = new Replanner($programStore, $programPlanner, $deps, $estimates, $criticalPath);
+
+        $agentSettings = new JsonAgentSettingsStore($agentsDir);
+        $agentStore = new FilesystemAgentStore($agentsDir);
+        $agentRegistry = new ConfigAgentRegistry($agentStore, $this->loadAgentConfig());
+        $agentPolicies = AgentPolicyFactory::fromSettings($agentSettings->get());
+        $agentRouter = new AgentRouter($agentRegistry, $agentPolicies);
+        $agentCoordinator = new AgentCoordinator($agentStore, $agentSettings, $agentRouter);
+        $this->agentQuery = new AgentQueryService($agentStore, $agentSettings, $agentCoordinator, $agentRouter);
+
         $schedulingPolicies = SchedulingPolicyFactory::fromSettings($planningSettings->get());
         $scheduler = new Scheduler(
             $programStore,
@@ -395,7 +415,11 @@ final class MissionControlKernel
             new ProviderAllocator(),
             new WorkspaceAllocator(),
             new FailureRecoveryPolicy(),
-            new PlanningLaunchAdapter($missionCommands, $engine),
+            new AgentAssignmentAdapter(
+                new PlanningLaunchAdapter($missionCommands, $engine),
+                $agentCoordinator,
+                $agentSettings,
+            ),
             $criticalPath,
             $replanner,
         );
@@ -517,9 +541,32 @@ final class MissionControlKernel
         return $this->planningQuery;
     }
 
+    public function agents(): AgentQueryService
+    {
+        return $this->agentQuery;
+    }
+
     public function dataRoot(): string
     {
         return $this->dataRoot;
+    }
+
+    /** @return array<string, mixed> */
+    private function loadAgentConfig(): array
+    {
+        $configured = getenv('AEP_AGENTS_CONFIG');
+        $path = is_string($configured) && $configured !== ''
+            ? $configured
+            : dirname(__DIR__, 3) . '/deploy/agents.json';
+        if (!is_file($path)) {
+            return ['agents' => []];
+        }
+        $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($data)) {
+            throw new \RuntimeException('Invalid agents config.');
+        }
+
+        return $data;
     }
 
     /** @return array<string, mixed> */

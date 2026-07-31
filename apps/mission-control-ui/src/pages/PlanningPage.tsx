@@ -10,6 +10,7 @@ import {
   useProgramQueue,
   useProgramSchedule,
   useProgramTimeline,
+  useProgramAssignments,
   usePrograms,
 } from '@/api/hooks';
 import { Button, EmptyState, PageHeader, Status, statusTone, ToastHost } from '@/design-system/ui';
@@ -24,6 +25,7 @@ type Tab =
   | 'allocations'
   | 'queue'
   | 'replan'
+  | 'assignments'
   | 'timeline';
 
 export function PlanningPage() {
@@ -46,6 +48,7 @@ export function PlanningPage() {
   const allocations = useProgramAllocations(activeId);
   const queue = useProgramQueue(activeId);
   const timeline = useProgramTimeline(activeId);
+  const assignments = useProgramAssignments(activeId);
 
   const graphNodes = useMemo(() => {
     const g = detail.data?.graph as { nodes?: Array<Record<string, unknown>> } | undefined;
@@ -142,6 +145,7 @@ export function PlanningPage() {
     { id: 'allocations', label: 'Resources' },
     { id: 'queue', label: 'Queue' },
     { id: 'replan', label: 'Replan Preview' },
+    { id: 'assignments', label: 'Agents' },
     { id: 'timeline', label: 'Timeline' },
   ];
 
@@ -344,6 +348,30 @@ export function PlanningPage() {
           </pre>
         ) : (
           <EmptyState title="No replan preview" description="Run replan preview for the selected program." />
+        )
+      )}
+
+      {tab === 'assignments' && (
+        (assignments.data?.items?.length ?? 0) === 0 ? (
+          <EmptyState title="No agent assignments" description="Assignments appear when program nodes launch with multi-agent collaboration enabled." />
+        ) : (
+          <div className="aep-table-wrap">
+            <table className="aep-table">
+              <thead><tr><th>Assignment</th><th>Agent</th><th>Role</th><th>Status</th><th>Node</th><th>Mission</th></tr></thead>
+              <tbody>
+                {(assignments.data?.items ?? []).map((a) => (
+                  <tr key={String(a.assignmentId)}>
+                    <td className="aep-mono">{String(a.assignmentId)}</td>
+                    <td className="aep-mono">{String(a.agentId)}</td>
+                    <td>{String(a.role)}</td>
+                    <td><Status label={String(a.status)} tone={statusTone(String(a.status))} /></td>
+                    <td className="aep-mono">{String(a.nodeId ?? '—')}</td>
+                    <td>{a.missionId ? <Link className="aep-mono" to={`/missions/${String(a.missionId)}`}>{String(a.missionId)}</Link> : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )
       )}
 

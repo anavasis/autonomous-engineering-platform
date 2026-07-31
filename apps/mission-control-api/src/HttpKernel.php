@@ -408,11 +408,11 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.7.0',
+                'version' => '0.8.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
-                    'assignedAgent' => false,
+                    'assignedAgent' => true,
                     'sse' => false,
                     'autonomousMissionExecution' => true,
                     'engineeringExecutionProviders' => true,
@@ -420,6 +420,7 @@ final class HttpKernel
                     'codeReviewPatchPipeline' => true,
                     'engineeringKnowledgeMemory' => true,
                     'autonomousPlanningScheduling' => true,
+                    'multiAgentCollaboration' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
@@ -428,6 +429,7 @@ final class HttpKernel
                 'patches' => $this->app->patches()->settings(),
                 'knowledge' => $this->app->knowledge()->settings(),
                 'planning' => $this->app->planning()->settings(),
+                'agents' => $this->app->agents()->settings(),
             ]);
 
             return;
@@ -480,6 +482,183 @@ final class HttpKernel
             $this->app->auth()->assertRole($user, Role::OPERATOR);
             $body = $this->jsonBody();
             JsonResponse::send(['settings' => $this->app->planning()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/agents') {
+            JsonResponse::send(['settings' => $this->app->agents()->settings()]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/agents') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['settings' => $this->app->agents()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/agents/dashboard') {
+            JsonResponse::send($this->app->agents()->dashboard());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/agents/capabilities') {
+            JsonResponse::send(['items' => $this->app->agents()->capabilities()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/agents') {
+            $role = isset($_GET['role']) && is_string($_GET['role']) ? $_GET['role'] : null;
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            $capability = isset($_GET['capability']) && is_string($_GET['capability']) ? $_GET['capability'] : null;
+            JsonResponse::send(['items' => $this->app->agents()->list($role, $status, $capability)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/agents') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['agent' => $this->app->agents()->register($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/assignments') {
+            $programId = isset($_GET['programId']) && is_string($_GET['programId']) ? $_GET['programId'] : null;
+            $missionId = isset($_GET['missionId']) && is_string($_GET['missionId']) ? $_GET['missionId'] : null;
+            $agentId = isset($_GET['agentId']) && is_string($_GET['agentId']) ? $_GET['agentId'] : null;
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            JsonResponse::send(['items' => $this->app->agents()->assignments($programId, $missionId, $agentId, $status)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/assignments') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['assignment' => $this->app->agents()->assign($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/assignments/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->agents()->assignment($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Assignment not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/assignments/([A-Za-z0-9_-]+)/complete$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $msg = is_string($body['message'] ?? null) ? $body['message'] : '';
+            JsonResponse::send(['assignment' => $this->app->agents()->complete($m[1], $msg)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/assignments/([A-Za-z0-9_-]+)/fail$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $msg = is_string($body['message'] ?? null) ? $body['message'] : '';
+            JsonResponse::send(['assignment' => $this->app->agents()->fail($m[1], $msg)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/assignments/([A-Za-z0-9_-]+)/reassign$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['assignment' => $this->app->agents()->reassign($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/assignments/([A-Za-z0-9_-]+)/approve$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            // Approval unblocks waiting assignments by completing the gate as success signal.
+            JsonResponse::send(['assignment' => $this->app->agents()->complete($m[1], 'human approved')]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/agents/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->agents()->get($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Agent not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/agents/([A-Za-z0-9_-]+)/timeline$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->agents()->timeline($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/agents/([A-Za-z0-9_-]+)/metrics$#', $path, $m) === 1) {
+            JsonResponse::send($this->app->agents()->metrics($m[1]));
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/agents/([A-Za-z0-9_-]+)/sessions$#', $path, $m) === 1) {
+            $agent = $this->app->agents()->get($m[1]);
+            if ($agent === null) {
+                JsonResponse::problem('Not Found', 404, 'Agent not found.');
+
+                return;
+            }
+            JsonResponse::send(['items' => $agent['sessions'] ?? []]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/agents/([A-Za-z0-9_-]+)/retire$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['agent' => $this->app->agents()->retire($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/agents/([A-Za-z0-9_-]+)/health/check$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['agent' => $this->app->agents()->healthCheck($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/assignments$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->agents()->assignments($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/assignments$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->agents()->assignments(null, $m[1])]);
 
             return;
         }

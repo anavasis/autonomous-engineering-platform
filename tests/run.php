@@ -47,6 +47,9 @@ $testFiles = [
     __DIR__ . '/Infrastructure/Knowledge/FilesystemKnowledgeStoreTest.php',
     __DIR__ . '/Application/Planning/PlanningPipelineServiceTest.php',
     __DIR__ . '/Infrastructure/Planning/FilesystemProgramStoreTest.php',
+    __DIR__ . '/Application/Agent/AgentCoordinatorTest.php',
+    __DIR__ . '/Infrastructure/Agent/FilesystemAgentStoreTest.php',
+    __DIR__ . '/Infrastructure/Agent/AgentAssignmentAdapterTest.php',
 ];
 
 $passed = 0;

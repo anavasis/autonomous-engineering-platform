@@ -17,10 +17,10 @@ final class MissionControlKernelTest
         putenv('AEP_BOOTSTRAP_ADMIN_DISPLAY=Kernel Admin');
 
         try {
-            $kernel = new MissionControlKernel($root, '0.7.0');
+            $kernel = new MissionControlKernel($root, '0.8.0');
             $health = $kernel->health()->probe();
             Assert::same('ok', $health['status']);
-            Assert::same('0.7.0', $health['version']);
+            Assert::same('0.8.0', $health['version']);
 
             $login = $kernel->auth()->login('admin', 'kernel-secret', '2026-07-31T03:00:00Z');
             Assert::same('admin', $login['user']->username());
@@ -32,6 +32,8 @@ final class MissionControlKernelTest
             Assert::same([], $kernel->missions()->list());
             Assert::same([], $kernel->projects()->list());
             Assert::same([], $kernel->approvals()->list());
+            Assert::true(isset($kernel->agents()->settings()['enabled']));
+            Assert::true(is_array($kernel->agents()->dashboard()));
         } finally {
             $this->removeDir($root);
             putenv('AEP_BOOTSTRAP_ADMIN_USERNAME');
