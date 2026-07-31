@@ -494,3 +494,123 @@ export function useApprovalDecision() {
     },
   });
 }
+
+export function useAgents() {
+  return useQuery({
+    queryKey: ['agents'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/agents'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useAgent(id: string) {
+  return useQuery({
+    queryKey: ['agent', id],
+    queryFn: () => api<Record<string, unknown>>(`/agents/${encodeURIComponent(id)}`),
+    enabled: Boolean(id),
+    refetchInterval: 4000,
+  });
+}
+
+export function useAgentDashboard() {
+  return useQuery({
+    queryKey: ['agent-dashboard'],
+    queryFn: () => api<Record<string, unknown>>('/agents/dashboard'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useAgentCapabilities() {
+  return useQuery({
+    queryKey: ['agent-capabilities'],
+    queryFn: () => api<{ items: string[] }>('/agents/capabilities'),
+  });
+}
+
+export function useAssignments(params: { missionId?: string; programId?: string; agentId?: string } = {}) {
+  const q = new URLSearchParams();
+  if (params.missionId) q.set('missionId', params.missionId);
+  if (params.programId) q.set('programId', params.programId);
+  if (params.agentId) q.set('agentId', params.agentId);
+  const qs = q.toString();
+  return useQuery({
+    queryKey: ['assignments', params],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/assignments${qs ? `?${qs}` : ''}`),
+    refetchInterval: 4000,
+  });
+}
+
+export function useAgentAssignments(params: { missionId?: string; programId?: string; agentId?: string } = {}) {
+  return useAssignments(params);
+}
+
+export function useMissionAssignments(missionId: string) {
+  return useQuery({
+    queryKey: ['mission-assignments', missionId],
+    queryFn: () =>
+      api<{ items: Array<Record<string, unknown>> }>(`/missions/${encodeURIComponent(missionId)}/assignments`),
+    enabled: Boolean(missionId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useProgramAssignments(programId: string) {
+  return useQuery({
+    queryKey: ['program-assignments', programId],
+    queryFn: () =>
+      api<{ items: Array<Record<string, unknown>> }>(`/programs/${encodeURIComponent(programId)}/assignments`),
+    enabled: Boolean(programId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useAgentTimeline(agentId: string) {
+  return useQuery({
+    queryKey: ['agent-timeline', agentId],
+    queryFn: () =>
+      api<{ items: Array<Record<string, unknown>> }>(`/agents/${encodeURIComponent(agentId)}/timeline`),
+    enabled: Boolean(agentId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useAgentMetrics(agentId: string) {
+  return useQuery({
+    queryKey: ['agent-metrics', agentId],
+    queryFn: () => api<Record<string, unknown>>(`/agents/${encodeURIComponent(agentId)}/metrics`),
+    enabled: Boolean(agentId),
+  });
+}
+
+export function useAgentSessions(agentId: string) {
+  return useQuery({
+    queryKey: ['agent-sessions', agentId],
+    queryFn: () =>
+      api<{ items: Array<Record<string, unknown>> }>(`/agents/${encodeURIComponent(agentId)}/sessions`),
+    enabled: Boolean(agentId),
+  });
+}
+
+export function useAgentSettings() {
+  return useQuery({
+    queryKey: ['agent-settings'],
+    queryFn: () => api<{ settings: Record<string, unknown> }>('/settings/agents'),
+  });
+}
+
+export function useUpdateAgentSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api<{ settings: Record<string, unknown> }>('/settings/agents', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agent-settings'] });
+      void qc.invalidateQueries({ queryKey: ['agent-dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+}
+
