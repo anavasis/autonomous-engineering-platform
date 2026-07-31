@@ -17,13 +17,13 @@ use Aep\Application\MissionEngine\Step\StartInspectionStep;
 use Aep\Application\MissionEngine\Step\SubmitInspectionStep;
 
 /**
- * Fixed linear Mission plan for ORCH-R9 MVP. No dynamic planning.
+ * Legacy fixed linear Mission plan (ORCH-R9). Kept for compatibility and equality tests.
  */
-final class DefaultMissionPlanFactory
+final class DefaultMissionPlanFactory implements MissionPlanFactory
 {
     public function build(MissionContext $context): MissionPlan
     {
-        unset($context); // plan is fixed; context reserved for future factories
+        unset($context);
 
         return new MissionPlan([
             new DefineScopeStep(),
@@ -39,5 +39,10 @@ final class DefaultMissionPlanFactory
             new MarkPrReadyStep(),
             new CompleteMissionStep(),
         ]);
+    }
+
+    public function runAttributes(): array
+    {
+        return [];
     }
 }

@@ -24,7 +24,7 @@ final class MissionEngine
         private readonly MissionCommandService $missions,
         private readonly MissionRepository $missionRepository,
         private readonly MissionRunRepository $runs,
-        private readonly DefaultMissionPlanFactory $planFactory,
+        private readonly MissionPlanFactory $planFactory,
         private readonly ExecutionService $execution,
         private readonly ValidationPipeline $validation,
     ) {
@@ -41,6 +41,8 @@ final class MissionEngine
 
         $context = $this->newContext($request, $token, $request->attributes());
         $plan = $this->planFactory->build($context);
+        $mergedAttributes = array_merge($request->attributes(), $this->planFactory->runAttributes());
+        $context = $this->newContext($request, $token, $mergedAttributes);
 
         $checkpoint = new MissionCheckpoint(
             $request->runId(),
@@ -52,7 +54,7 @@ final class MissionEngine
             0,
             $request->occurredAtUtc(),
             $request->projectId(),
-            $request->attributes(),
+            $mergedAttributes,
             'Run started.'
         );
         $timeline = new MissionTimeline();
