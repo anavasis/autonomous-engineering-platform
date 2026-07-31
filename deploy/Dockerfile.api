@@ -1,0 +1,19 @@
+FROM php:8.3-cli-alpine
+
+WORKDIR /var/www/aep
+
+COPY src ./src
+COPY tests/bootstrap.php ./tests/bootstrap.php
+COPY apps/mission-control-api ./apps/mission-control-api
+COPY deploy/api-router.php ./deploy/api-router.php
+
+RUN mkdir -p /var/aep/data \
+  && chown -R www-data:www-data /var/aep/data
+
+ENV AEP_DATA_ROOT=/var/aep/data
+ENV AEP_VERSION=0.1.0
+
+USER www-data
+EXPOSE 8080
+
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "apps/mission-control-api/public", "deploy/api-router.php"]

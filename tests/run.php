@@ -30,6 +30,10 @@ $testFiles = [
     __DIR__ . '/Infrastructure/Workflow/JsonFileWorkflowLibraryTest.php',
     __DIR__ . '/Application/Artifact/ArtifactServiceTest.php',
     __DIR__ . '/Infrastructure/Artifact/FilesystemArtifactTest.php',
+    __DIR__ . '/Application/MissionControl/AuthServiceTest.php',
+    __DIR__ . '/Application/MissionControl/MissionControlQueryTest.php',
+    __DIR__ . '/Infrastructure/MissionControl/MissionControlKernelTest.php',
+    __DIR__ . '/Presentation/MissionControl/HttpKernelSmokeTest.php',
 ];
 
 $passed = 0;
