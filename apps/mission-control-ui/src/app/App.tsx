@@ -13,6 +13,7 @@ import { ArtifactsPage } from '@/pages/ArtifactsPage';
 import { ValidationPage } from '@/pages/ValidationPage';
 import { ApprovalsPage } from '@/pages/ApprovalsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { WorkspacesPage } from '@/pages/WorkspacesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,7 @@ export function App() {
               <Route path="missions/:missionId" element={<MissionDetailsPage />} />
               <Route path="timeline" element={<TimelinePage />} />
               <Route path="artifacts" element={<ArtifactsPage />} />
+              <Route path="workspaces" element={<WorkspacesPage />} />
               <Route path="validation" element={<ValidationPage />} />
               <Route path="approvals" element={<ApprovalsPage />} />
               <Route path="settings" element={<SettingsPage />} />

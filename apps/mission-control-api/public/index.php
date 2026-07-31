@@ -15,7 +15,7 @@ use Aep\Apps\MissionControlApi\HttpKernel;
 use Aep\Infrastructure\MissionControl\MissionControlKernel;
 
 $dataRoot = getenv('AEP_DATA_ROOT') ?: (dirname(__DIR__, 3) . '/var/data');
-$version = getenv('AEP_VERSION') ?: '0.3.0';
+$version = getenv('AEP_VERSION') ?: '0.4.0';
 
 $kernel = new MissionControlKernel($dataRoot, $version);
 $http = new HttpKernel($kernel);

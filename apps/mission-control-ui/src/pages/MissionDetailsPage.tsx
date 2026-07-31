@@ -10,6 +10,7 @@ import {
   useExecutionProviders,
   useMission,
   useMissionExecution,
+  useMissionWorkspace,
   useTimeline,
   useValidation,
 } from '@/api/hooks';
@@ -30,6 +31,7 @@ const TABS = [
   'conversation',
   'timeline',
   'execution',
+  'workspace',
   'artifacts',
   'logs',
   'validation',
@@ -60,6 +62,7 @@ export function MissionDetailsPage() {
   const execEvents = useExecutionEvents(sessionId);
   const execPrompt = useExecutionPrompt(sessionId);
   const execMetrics = useExecutionMetrics(sessionId);
+  const missionWorkspace = useMissionWorkspace(missionId);
   const [tab, setTab] = useState<(typeof TABS)[number]>('summary');
   const [selectedEvent, setSelectedEvent] = useState<Record<string, unknown> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -287,6 +290,24 @@ export function MissionDetailsPage() {
             />
           )}
         </div>
+      )}
+
+      {tab === 'workspace' && (
+        missionWorkspace.data?.workspace ? (
+          <div className="aep-table-wrap">
+            <table className="aep-table" style={{ minWidth: 0 }}>
+              <tbody>
+                <tr><td>Workspace</td><td className="aep-mono"><Link to="/workspaces">{String(missionWorkspace.data.workspace.workspaceId)}</Link></td></tr>
+                <tr><td>Status</td><td><Status label={String(missionWorkspace.data.workspace.status)} tone={statusTone(String(missionWorkspace.data.workspace.status))} /></td></tr>
+                <tr><td>Fingerprint</td><td className="aep-mono">{String(missionWorkspace.data.workspace.reproducibilityFingerprint ?? '—')}</td></tr>
+                <tr><td>Quota</td><td className="aep-mono">{JSON.stringify(missionWorkspace.data.workspace.quota ?? {})}</td></tr>
+                <tr><td>Health</td><td><Status label={String((missionWorkspace.data.workspace.health as Record<string, unknown> | undefined)?.status ?? '—')} tone={statusTone(String((missionWorkspace.data.workspace.health as Record<string, unknown> | undefined)?.status ?? ''))} /></td></tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No engineering workspace" description="A workspace is created when provider-backed execution provisions isolation for this mission." />
+        )
       )}
 
       {tab === 'plan' && (
