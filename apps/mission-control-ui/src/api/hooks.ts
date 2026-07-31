@@ -174,6 +174,66 @@ export function useExecutionSettings() {
   });
 }
 
+export function useWorkspaces(missionId?: string) {
+  const q = missionId ? `?missionId=${encodeURIComponent(missionId)}` : '';
+  return useQuery({
+    queryKey: ['workspaces', missionId ?? 'all'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/workspaces${q}`),
+    refetchInterval: 5000,
+  });
+}
+
+export function useWorkspace(workspaceId: string) {
+  return useQuery({
+    queryKey: ['workspace', workspaceId],
+    queryFn: () => api<Record<string, unknown>>(`/workspaces/${workspaceId}`),
+    enabled: Boolean(workspaceId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useWorkspaceTimeline(workspaceId: string) {
+  return useQuery({
+    queryKey: ['workspace-timeline', workspaceId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/workspaces/${workspaceId}/timeline`),
+    enabled: Boolean(workspaceId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useWorkspaceMounts(workspaceId: string) {
+  return useQuery({
+    queryKey: ['workspace-mounts', workspaceId],
+    queryFn: () => api<Record<string, unknown>>(`/workspaces/${workspaceId}/mounts`),
+    enabled: Boolean(workspaceId),
+  });
+}
+
+export function useWorkspaceSize(workspaceId: string) {
+  return useQuery({
+    queryKey: ['workspace-size', workspaceId],
+    queryFn: () => api<Record<string, unknown>>(`/workspaces/${workspaceId}/size`),
+    enabled: Boolean(workspaceId),
+    refetchInterval: 5000,
+  });
+}
+
+export function useMissionWorkspace(missionId: string) {
+  return useQuery({
+    queryKey: ['mission-workspace', missionId],
+    queryFn: () => api<{ workspace: Record<string, unknown> | null }>(`/missions/${missionId}/workspace`),
+    enabled: Boolean(missionId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useWorkspaceSettings() {
+  return useQuery({
+    queryKey: ['workspace-settings'],
+    queryFn: () => api<{ settings: Record<string, unknown> }>('/settings/workspaces'),
+  });
+}
+
 export function useApprovalDecision() {
   const qc = useQueryClient();
   return useMutation({

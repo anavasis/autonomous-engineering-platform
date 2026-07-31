@@ -1,12 +1,15 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '@/api/client';
-import { useExecutionSettings, useSettings } from '@/api/hooks';
+import { useExecutionSettings, useSettings, useWorkspaceSettings } from '@/api/hooks';
 import { Button, EmptyState, Field, PageHeader, Status, statusTone, ToastHost } from '@/design-system/ui';
 
 export function SettingsPage() {
   const { data, isLoading, isError, error } = useSettings();
   const execution = useExecutionSettings();
+  const workspaces = useWorkspaceSettings();
   const [defaultProviderId, setDefaultProviderId] = useState('');
+  const [maxBytes, setMaxBytes] = useState('2147483648');
+  const [keepLatestN, setKeepLatestN] = useState('20');
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -14,6 +17,13 @@ export function SettingsPage() {
     const current = execution.data?.settings?.defaultProviderId;
     setDefaultProviderId(typeof current === 'string' ? current : '');
   }, [execution.data]);
+
+  useEffect(() => {
+    const s = workspaces.data?.settings;
+    if (!s) return;
+    if (typeof s.maxBytes === 'number') setMaxBytes(String(s.maxBytes));
+    if (typeof s.keepLatestN === 'number') setKeepLatestN(String(s.keepLatestN));
+  }, [workspaces.data]);
 
   if (isLoading) return <EmptyState title="Loading settings" description="Reading operator configuration…" />;
   if (isError) return <EmptyState title="Settings unavailable" description={error.message} />;
@@ -42,11 +52,31 @@ export function SettingsPage() {
     }
   }
 
+  async function saveWorkspaces(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api('/settings/workspaces', {
+        method: 'PUT',
+        body: JSON.stringify({
+          maxBytes: Number(maxBytes),
+          keepLatestN: Number(keepLatestN),
+        }),
+      });
+      setToast('Workspace settings saved');
+      await workspaces.refetch();
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Settings"
-        description="Deployment identity, execution providers, and platform feature flags."
+        description="Deployment identity, execution providers, workspace quotas, and platform feature flags."
       />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
         <div className="aep-table-wrap">
@@ -102,39 +132,24 @@ export function SettingsPage() {
             <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save provider selection'}</Button>
           </div>
         </form>
+      </section>
 
-        <div className="aep-table-wrap" style={{ marginTop: '1.25rem' }}>
-          <table className="aep-table">
-            <thead>
-              <tr>
-                <th>Provider</th>
-                <th>Health</th>
-                <th>Capabilities</th>
-              </tr>
-            </thead>
-            <tbody>
-              {providers.map((p) => {
-                const healthRow = (p.health as Record<string, unknown> | undefined) ?? {};
-                const caps = (p.capabilities as Record<string, unknown> | undefined) ?? {};
-                return (
-                  <tr key={String(p.id)}>
-                    <td>
-                      <div>{String(p.displayName)}</div>
-                      <div className="aep-mono" style={{ color: 'var(--aep-ink-faint)' }}>{String(p.id)}</div>
-                    </td>
-                    <td>
-                      <Status label={String(healthRow.status ?? 'unknown')} tone={statusTone(String(healthRow.status ?? ''))} />
-                      <div style={{ color: 'var(--aep-ink-muted)', fontSize: '0.85rem' }}>{String(healthRow.message ?? '')}</div>
-                    </td>
-                    <td className="aep-mono" style={{ fontSize: '0.8rem' }}>
-                      stream={String(caps.streaming)} · cancel={String(caps.cancel)} · resume={String(caps.resume)} · tokens={String(caps.maxContextTokens)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <section style={{ marginTop: '1.75rem' }}>
+        <PageHeader
+          title="Workspace settings"
+          description="Quotas and retention for autonomous engineering workspaces."
+        />
+        <form onSubmit={(e) => void saveWorkspaces(e)} style={{ display: 'grid', gap: '1rem', maxWidth: 560 }}>
+          <Field label="Max bytes">
+            <input className="aep-input" value={maxBytes} onChange={(e) => setMaxBytes(e.target.value)} />
+          </Field>
+          <Field label="Keep latest N per mission">
+            <input className="aep-input" value={keepLatestN} onChange={(e) => setKeepLatestN(e.target.value)} />
+          </Field>
+          <div>
+            <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save workspace settings'}</Button>
+          </div>
+        </form>
       </section>
       <ToastHost message={toast} onDismiss={() => setToast(null)} />
     </div>

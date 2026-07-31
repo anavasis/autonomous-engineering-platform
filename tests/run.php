@@ -39,6 +39,8 @@ $testFiles = [
     __DIR__ . '/Application/MissionExecution/AutonomousMissionServiceTest.php',
     __DIR__ . '/Application/EngineeringExecution/EngineeringExecutionOrchestratorTest.php',
     __DIR__ . '/Infrastructure/EngineeringExecution/ProviderRoutingExecutorTest.php',
+    __DIR__ . '/Application/EngineeringWorkspace/EngineeringWorkspaceServiceTest.php',
+    __DIR__ . '/Infrastructure/EngineeringWorkspace/FilesystemEngineeringWorkspaceStoreTest.php',
 ];
 
 $passed = 0;

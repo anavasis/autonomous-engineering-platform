@@ -112,7 +112,18 @@ final class EngineeringExecutionOrchestrator
                 $pack = $this->context->pack($request, $allowedPaths);
                 $prompt = $this->prompts->build($request, $allowedPaths, $nonGoals, $pack['notes']);
                 $session->setPrompt($prompt);
-                $workspacePath = $this->workspace->prepare($sessionId, $prompt, $pack['files']);
+                $projectId = $request->contextValue('projectId');
+                $artifactMounts = $request->contextValue('artifactMounts');
+                $gitSpec = $request->contextValue('git');
+                $workspacePath = $this->workspace->prepare($sessionId, $prompt, $pack['files'], [
+                    'missionId' => $request->missionId(),
+                    'runId' => $runId,
+                    'projectId' => is_string($projectId) ? $projectId : null,
+                    'allowedPaths' => $allowedPaths,
+                    'artifactMounts' => is_array($artifactMounts) ? $artifactMounts : [],
+                    'git' => is_array($gitSpec) ? $gitSpec : [],
+                    'redactions' => is_int($pack['redactions'] ?? null) ? $pack['redactions'] : 0,
+                ]);
                 $session->setCheckpoint([
                     'id' => 'cp_' . bin2hex(random_bytes(4)),
                     'phase' => 'workspace_prepared',

@@ -4,18 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Infrastructure\EngineeringExecution;
 
-use Aep\Application\Artifact\ArtifactService;
 use Aep\Application\EngineeringExecution\Service\ArtifactCapture;
 use Aep\Application\EngineeringExecution\Service\ContextPackager;
 use Aep\Application\EngineeringExecution\Service\DiffCollector;
 use Aep\Application\EngineeringExecution\Service\EngineeringExecutionOrchestrator;
 use Aep\Application\EngineeringExecution\Service\PromptPipeline;
 use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
-use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
 use Aep\Application\Execution\ExecutionRequest;
 use Aep\Application\Execution\ExecutionService;
-use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
-use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
@@ -24,6 +20,7 @@ use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSettingsStore;
 use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 use Aep\Infrastructure\Execution\ProviderRoutingExecutor;
 use Tests\Support\Assert;
+use Tests\Support\EngineeringWorkspaceTestFactory;
 
 final class ProviderRoutingExecutorTest
 {
@@ -108,23 +105,19 @@ final class ProviderRoutingExecutorTest
     private function router(string $root, ?JsonExecutionSettingsStore $settings = null): ProviderRoutingExecutor
     {
         $executionDir = $root . '/execution';
-        $artifactsDir = $root . '/artifacts';
-        foreach ([$executionDir, $artifactsDir] as $dir) {
-            if (!is_dir($dir)) {
-                mkdir($dir, 0775, true);
-            }
+        if (!is_dir($executionDir)) {
+            mkdir($executionDir, 0775, true);
         }
         $settings ??= new JsonExecutionSettingsStore($executionDir);
-        $workspaces = new FilesystemWorkspaceManager($artifactsDir);
-        $artifacts = new ArtifactService($workspaces, new FilesystemArtifactStore($workspaces));
+        $factory = EngineeringWorkspaceTestFactory::make($root);
         $orchestrator = new EngineeringExecutionOrchestrator(
             $this->registry(),
             new JsonExecutionSessionStore($executionDir),
             new PromptPipeline(),
             new ContextPackager(),
-            new WorkspacePreparer($executionDir),
+            $factory['preparer'],
             new DiffCollector(),
-            new ArtifactCapture($artifacts),
+            new ArtifactCapture($factory['artifacts']),
             new ResultNormalizer(),
         );
 

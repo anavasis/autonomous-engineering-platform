@@ -35,12 +35,22 @@ final class DiffCollector
             return ['text' => $text, 'files' => array_values(array_unique($files))];
         }
 
-        $baseline = $root . '/.baseline';
-        $context = $root . '/context';
+        $contextCandidates = [$root . '/context', $root . '/mounts/context'];
+        $baselineCandidates = [$root . '/.baseline', $root . '/.aep/baseline'];
         $files = [];
         $chunks = [];
 
-        if (is_dir($context)) {
+        foreach ($contextCandidates as $context) {
+            if (!is_dir($context)) {
+                continue;
+            }
+            $baseline = $baselineCandidates[0];
+            foreach ($baselineCandidates as $candidate) {
+                if (is_dir($candidate)) {
+                    $baseline = $candidate;
+                    break;
+                }
+            }
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($context, \FilesystemIterator::SKIP_DOTS)
             );
@@ -53,6 +63,9 @@ final class DiffCollector
                 if ($rel === '' || !$this->allowed($rel, $allowedPaths)) {
                     continue;
                 }
+                if (in_array($rel, $files, true)) {
+                    continue;
+                }
                 $after = (string) file_get_contents($full);
                 $beforePath = $baseline . '/' . $rel;
                 $before = is_file($beforePath) ? (string) file_get_contents($beforePath) : '';
@@ -62,6 +75,7 @@ final class DiffCollector
                 $files[] = $rel;
                 $chunks[] = $this->unified($rel, $before, $after);
             }
+            break;
         }
 
         return [

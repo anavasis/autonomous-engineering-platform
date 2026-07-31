@@ -408,7 +408,7 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.3.0',
+                'version' => '0.4.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
@@ -416,11 +416,119 @@ final class HttpKernel
                     'sse' => false,
                     'autonomousMissionExecution' => true,
                     'engineeringExecutionProviders' => true,
+                    'engineeringWorkspaces' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
                 'execution' => $this->app->execution()->settings(),
+                'workspaces' => $this->app->workspaces()->settings(),
             ]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/workspaces') {
+            JsonResponse::send(['settings' => $this->app->workspaces()->settings()]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/workspaces') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['settings' => $this->app->workspaces()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/workspaces') {
+            $missionId = isset($_GET['missionId']) && is_string($_GET['missionId']) ? $_GET['missionId'] : null;
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            JsonResponse::send(['items' => $this->app->workspaces()->list($missionId, $status)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->workspaces()->get($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Engineering workspace not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/timeline$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->workspaces()->timeline($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/mounts$#', $path, $m) === 1) {
+            $item = $this->app->workspaces()->mounts($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Engineering workspace not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/size$#', $path, $m) === 1) {
+            $item = $this->app->workspaces()->size($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Engineering workspace not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/snapshot$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $snapshotId = $this->app->engineeringWorkspaces()->snapshot($m[1]);
+            JsonResponse::send(['ok' => true, 'snapshotId' => $snapshotId]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/seal$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->engineeringWorkspaces()->seal($m[1])->toArray());
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/cleanup$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $this->app->engineeringWorkspaces()->cleanup($m[1]);
+            JsonResponse::send(['ok' => true, 'workspaceId' => $m[1]]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/workspaces/cleanup') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::ADMIN);
+            $purged = $this->app->engineeringWorkspaces()->applyRetention();
+            JsonResponse::send(['ok' => true, 'purged' => $purged]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/workspace$#', $path, $m) === 1) {
+            JsonResponse::send(['workspace' => $this->app->workspaces()->forMission($m[1])]);
 
             return;
         }

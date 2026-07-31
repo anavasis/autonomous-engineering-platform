@@ -4,21 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Application\EngineeringExecution;
 
-use Aep\Application\Artifact\ArtifactService;
 use Aep\Application\EngineeringExecution\Service\ArtifactCapture;
 use Aep\Application\EngineeringExecution\Service\ContextPackager;
 use Aep\Application\EngineeringExecution\Service\DiffCollector;
 use Aep\Application\EngineeringExecution\Service\EngineeringExecutionOrchestrator;
 use Aep\Application\EngineeringExecution\Service\PromptPipeline;
 use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
-use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
 use Aep\Application\Execution\ExecutionRequest;
-use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
-use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
 use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSessionStore;
 use Tests\Support\Assert;
+use Tests\Support\EngineeringWorkspaceTestFactory;
 
 final class EngineeringExecutionOrchestratorTest
 {
@@ -96,12 +93,10 @@ final class EngineeringExecutionOrchestratorTest
     private function build(string $root): EngineeringExecutionOrchestrator
     {
         $executionDir = $root . '/execution';
-        $artifactsDir = $root . '/artifacts';
-        foreach ([$executionDir, $artifactsDir] as $dir) {
-            mkdir($dir, 0775, true);
+        if (!is_dir($executionDir)) {
+            mkdir($executionDir, 0775, true);
         }
-        $workspaces = new FilesystemWorkspaceManager($artifactsDir);
-        $artifacts = new ArtifactService($workspaces, new FilesystemArtifactStore($workspaces));
+        $factory = EngineeringWorkspaceTestFactory::make($root);
         $registry = new ConfigProviderRegistry([
             'providers' => [
                 ['id' => 'local-agent', 'type' => 'local-agent', 'enabled' => true],
@@ -115,9 +110,9 @@ final class EngineeringExecutionOrchestratorTest
             new JsonExecutionSessionStore($executionDir),
             new PromptPipeline(),
             new ContextPackager(),
-            new WorkspacePreparer($executionDir),
+            $factory['preparer'],
             new DiffCollector(),
-            new ArtifactCapture($artifacts),
+            new ArtifactCapture($factory['artifacts']),
             new ResultNormalizer(),
         );
     }

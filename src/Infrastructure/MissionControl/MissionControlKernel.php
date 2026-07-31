@@ -13,6 +13,8 @@ use Aep\Application\EngineeringExecution\Service\EngineeringExecutionQueryServic
 use Aep\Application\EngineeringExecution\Service\PromptPipeline;
 use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
 use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
+use Aep\Application\EngineeringWorkspace\Service\EngineeringWorkspaceService;
+use Aep\Application\EngineeringWorkspace\Service\WorkspaceQueryService;
 use Aep\Application\Execution\ExecutionService;
 use Aep\Application\Mission\MissionCommandService;
 use Aep\Application\MissionControl\Auth\AuthService;
@@ -46,6 +48,9 @@ use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
 use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSessionStore;
 use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSettingsStore;
+use Aep\Infrastructure\EngineeringWorkspace\Git\GitWorktreeCheckout;
+use Aep\Infrastructure\EngineeringWorkspace\Store\FilesystemEngineeringWorkspaceStore;
+use Aep\Infrastructure\EngineeringWorkspace\Store\JsonWorkspaceSettingsStore;
 use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 use Aep\Infrastructure\Execution\ProviderRoutingExecutor;
 use Aep\Infrastructure\MissionControl\Auth\FileSessionStore;
@@ -80,9 +85,11 @@ final class MissionControlKernel
     private AutonomousMissionService $ame;
     private EngineeringExecutionQueryService $executionQuery;
     private EngineeringExecutionOrchestrator $executionOrchestrator;
+    private EngineeringWorkspaceService $engineeringWorkspaces;
+    private WorkspaceQueryService $workspaceQuery;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.3.0')
+    public function __construct(string $dataRoot, string $version = '0.4.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -97,8 +104,21 @@ final class MissionControlKernel
         $sessionsDir = $authDir . '/sessions';
         $ameDir = $this->dataRoot . '/ame';
         $executionDir = $this->dataRoot . '/execution';
+        $workspacesDir = $this->dataRoot . '/workspaces';
+        $gitCacheDir = $this->dataRoot . '/git-cache';
 
-        foreach ([$missionsDir, $projectsDir, $runsDir, $artifactsDir, $authDir, $sessionsDir, $ameDir, $executionDir] as $dir) {
+        foreach ([
+            $missionsDir,
+            $projectsDir,
+            $runsDir,
+            $artifactsDir,
+            $authDir,
+            $sessionsDir,
+            $ameDir,
+            $executionDir,
+            $workspacesDir,
+            $gitCacheDir,
+        ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
             }
@@ -129,12 +149,22 @@ final class MissionControlKernel
             'legacy-local' => static fn (array $options): LegacyExecutorBridgeProvider => new LegacyExecutorBridgeProvider($legacyLocal, $options),
         ]);
 
+        $workspaceStore = new FilesystemEngineeringWorkspaceStore($workspacesDir);
+        $workspaceSettings = new JsonWorkspaceSettingsStore($workspacesDir);
+        $this->engineeringWorkspaces = new EngineeringWorkspaceService(
+            $workspaceStore,
+            $workspaceSettings,
+            new GitWorktreeCheckout($gitCacheDir),
+            $artifactService,
+        );
+        $this->workspaceQuery = new WorkspaceQueryService($this->engineeringWorkspaces, $workspaceSettings);
+
         $this->executionOrchestrator = new EngineeringExecutionOrchestrator(
             $registry,
             $sessionStore,
             new PromptPipeline(),
             new ContextPackager(),
-            new WorkspacePreparer($executionDir),
+            new WorkspacePreparer($this->engineeringWorkspaces, $executionDir),
             new DiffCollector(),
             new ArtifactCapture($artifactService),
             new ResultNormalizer(),
@@ -269,6 +299,16 @@ final class MissionControlKernel
     public function executionOrchestrator(): EngineeringExecutionOrchestrator
     {
         return $this->executionOrchestrator;
+    }
+
+    public function workspaces(): WorkspaceQueryService
+    {
+        return $this->workspaceQuery;
+    }
+
+    public function engineeringWorkspaces(): EngineeringWorkspaceService
+    {
+        return $this->engineeringWorkspaces;
     }
 
     public function dataRoot(): string
