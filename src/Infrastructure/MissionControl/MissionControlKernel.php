@@ -27,6 +27,14 @@ use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
 use Aep\Application\EngineeringWorkspace\Service\EngineeringWorkspaceService;
 use Aep\Application\EngineeringWorkspace\Service\WorkspaceQueryService;
 use Aep\Application\Execution\ExecutionService;
+use Aep\Application\Knowledge\Policy\KnowledgeRetrievalPolicyFactory;
+use Aep\Application\Knowledge\Service\ArchivePolicy;
+use Aep\Application\Knowledge\Service\ForgetPolicy;
+use Aep\Application\Knowledge\Service\KnowledgeCaptureService;
+use Aep\Application\Knowledge\Service\KnowledgeGraph;
+use Aep\Application\Knowledge\Service\KnowledgeQueryService;
+use Aep\Application\Knowledge\Service\KnowledgeRanker;
+use Aep\Application\Knowledge\Service\KnowledgeRetrievalService;
 use Aep\Application\Mission\MissionCommandService;
 use Aep\Application\MissionControl\Auth\AuthService;
 use Aep\Application\MissionControl\Command\MissionControlCommandFacade;
@@ -70,6 +78,13 @@ use Aep\Infrastructure\EngineeringWorkspace\Store\FilesystemEngineeringWorkspace
 use Aep\Infrastructure\EngineeringWorkspace\Store\JsonWorkspaceSettingsStore;
 use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 use Aep\Infrastructure\Execution\ProviderRoutingExecutor;
+use Aep\Infrastructure\Knowledge\Adapter\KnowledgeCaptureAdapter;
+use Aep\Infrastructure\Knowledge\Adapter\KnowledgeRetrievalAdapter;
+use Aep\Infrastructure\Knowledge\Embedding\LocalLexicalEmbeddingProvider;
+use Aep\Infrastructure\Knowledge\Embedding\StubEmbeddingProvider;
+use Aep\Infrastructure\Knowledge\Provider\ConfigEmbeddingProviderRegistry;
+use Aep\Infrastructure\Knowledge\Store\FilesystemKnowledgeStore;
+use Aep\Infrastructure\Knowledge\Store\JsonKnowledgeSettingsStore;
 use Aep\Infrastructure\MissionControl\Auth\FileSessionStore;
 use Aep\Infrastructure\MissionControl\Auth\JsonUserStore;
 use Aep\Infrastructure\MissionControl\Catalog\JsonMissionCatalog;
@@ -106,9 +121,11 @@ final class MissionControlKernel
     private WorkspaceQueryService $workspaceQuery;
     private PatchPipelineService $patchPipeline;
     private PatchQueryService $patchQuery;
+    private KnowledgeQueryService $knowledgeQuery;
+    private KnowledgeCaptureService $knowledgeCapture;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.5.0')
+    public function __construct(string $dataRoot, string $version = '0.6.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -126,6 +143,7 @@ final class MissionControlKernel
         $workspacesDir = $this->dataRoot . '/workspaces';
         $gitCacheDir = $this->dataRoot . '/git-cache';
         $patchesDir = $this->dataRoot . '/patches';
+        $knowledgeDir = $this->dataRoot . '/knowledge';
 
         foreach ([
             $missionsDir,
@@ -139,6 +157,7 @@ final class MissionControlKernel
             $workspacesDir,
             $gitCacheDir,
             $patchesDir,
+            $knowledgeDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -213,14 +232,66 @@ final class MissionControlKernel
         );
         $this->patchQuery = new PatchQueryService($this->patchPipeline, $patchSettings, $reviewRegistry);
 
+        $knowledgeSettings = new JsonKnowledgeSettingsStore($knowledgeDir);
+        $knowledgeStore = new FilesystemKnowledgeStore($knowledgeDir);
+        $embeddingRegistry = new ConfigEmbeddingProviderRegistry($this->loadEmbeddingProviderConfig(), [
+            'local_lexical' => static fn (array $o): LocalLexicalEmbeddingProvider => new LocalLexicalEmbeddingProvider(
+                is_int($o['dimensions'] ?? null) ? $o['dimensions'] : 64
+            ),
+            'stub_embed' => static fn (array $o): StubEmbeddingProvider => new StubEmbeddingProvider(),
+        ]);
+        $ks = $knowledgeSettings->get();
+        $knowledgeGraph = new KnowledgeGraph($knowledgeStore);
+        $archivePolicy = new ArchivePolicy(
+            is_int($ks['archiveMaxAgeDays'] ?? null) ? (int) $ks['archiveMaxAgeDays'] : 180,
+            is_numeric($ks['archiveMinUsefulness'] ?? null) ? (float) $ks['archiveMinUsefulness'] : 0.15,
+        );
+        $forgetPolicy = new ForgetPolicy(
+            is_int($ks['forgetArchiveTtlDays'] ?? null) ? (int) $ks['forgetArchiveTtlDays'] : 90,
+        );
+        $this->knowledgeCapture = new KnowledgeCaptureService(
+            $knowledgeStore,
+            $knowledgeSettings,
+            $knowledgeGraph,
+            $embeddingRegistry,
+            $archivePolicy,
+            $forgetPolicy,
+        );
+        $retrievalPolicies = KnowledgeRetrievalPolicyFactory::fromSettings($ks);
+        $knowledgeRetrieval = new KnowledgeRetrievalService(
+            $knowledgeStore,
+            $knowledgeSettings,
+            new KnowledgeRanker($retrievalPolicies),
+            $embeddingRegistry,
+            $knowledgeGraph,
+        );
+        $this->knowledgeQuery = new KnowledgeQueryService(
+            $knowledgeStore,
+            $knowledgeSettings,
+            $this->knowledgeCapture,
+            $knowledgeRetrieval,
+            $knowledgeGraph,
+            $embeddingRegistry,
+        );
+
         $routing = new ProviderRoutingExecutor($legacyLocal, $this->executionOrchestrator, $settingsStore);
         $execution = new ExecutionService(
-            new PatchCreationAdapter(
-                $routing,
-                $this->patchPipeline,
-                $patchSettings,
+            new KnowledgeCaptureAdapter(
+                new PatchCreationAdapter(
+                    new KnowledgeRetrievalAdapter(
+                        $routing,
+                        $knowledgeRetrieval,
+                        $knowledgeSettings,
+                    ),
+                    $this->patchPipeline,
+                    $patchSettings,
+                    $sessionStore,
+                    $this->engineeringWorkspaces,
+                ),
+                $this->knowledgeCapture,
+                $knowledgeSettings,
                 $sessionStore,
-                $this->engineeringWorkspaces,
+                $this->patchPipeline,
             )
         );
         $validationPipeline = new ValidationPipeline([new DeclarativeContextValidationStep()]);
@@ -370,9 +441,47 @@ final class MissionControlKernel
         return $this->patchPipeline;
     }
 
+    public function knowledge(): KnowledgeQueryService
+    {
+        return $this->knowledgeQuery;
+    }
+
+    public function knowledgeCapture(): KnowledgeCaptureService
+    {
+        return $this->knowledgeCapture;
+    }
+
     public function dataRoot(): string
     {
         return $this->dataRoot;
+    }
+
+    /** @return array<string, mixed> */
+    private function loadEmbeddingProviderConfig(): array
+    {
+        $configured = getenv('AEP_EMBEDDING_PROVIDERS_CONFIG');
+        $path = is_string($configured) && $configured !== ''
+            ? $configured
+            : dirname(__DIR__, 3) . '/deploy/embedding-providers.json';
+        if (!is_file($path)) {
+            return [
+                'default' => 'local_lexical',
+                'providers' => [
+                    [
+                        'id' => 'local_lexical',
+                        'type' => 'local_lexical',
+                        'enabled' => true,
+                        'displayName' => 'Local Lexical Embedding',
+                    ],
+                ],
+            ];
+        }
+        $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($data)) {
+            throw new \RuntimeException('Invalid embedding providers config.');
+        }
+
+        return $data;
     }
 
     /** @return array<string, mixed> */

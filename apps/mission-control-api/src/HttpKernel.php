@@ -408,7 +408,7 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.5.0',
+                'version' => '0.6.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
@@ -418,12 +418,14 @@ final class HttpKernel
                     'engineeringExecutionProviders' => true,
                     'engineeringWorkspaces' => true,
                     'codeReviewPatchPipeline' => true,
+                    'engineeringKnowledgeMemory' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
                 'execution' => $this->app->execution()->settings(),
                 'workspaces' => $this->app->workspaces()->settings(),
                 'patches' => $this->app->patches()->settings(),
+                'knowledge' => $this->app->knowledge()->settings(),
             ]);
 
             return;
@@ -443,6 +445,148 @@ final class HttpKernel
             $this->app->auth()->assertRole($user, Role::OPERATOR);
             $body = $this->jsonBody();
             JsonResponse::send(['settings' => $this->app->patches()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/knowledge') {
+            JsonResponse::send([
+                'settings' => $this->app->knowledge()->settings(),
+                'embeddingProviders' => $this->app->knowledge()->listEmbeddingProviders(),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/knowledge') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['settings' => $this->app->knowledge()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/knowledge') {
+            $projectId = isset($_GET['projectId']) && is_string($_GET['projectId']) ? $_GET['projectId'] : null;
+            $kind = isset($_GET['kind']) && is_string($_GET['kind']) ? $_GET['kind'] : null;
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            $q = isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : null;
+            JsonResponse::send(['items' => $this->app->knowledge()->list($projectId, $kind, $status, $q)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/knowledge/timeline') {
+            JsonResponse::send(['items' => $this->app->knowledge()->timeline(null, 100)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/knowledge/lessons') {
+            $projectId = isset($_GET['projectId']) && is_string($_GET['projectId']) ? $_GET['projectId'] : null;
+            JsonResponse::send(['items' => $this->app->knowledge()->lessons($projectId)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/knowledge/similar/missions') {
+            $objective = isset($_GET['objective']) && is_string($_GET['objective']) ? $_GET['objective'] : '';
+            $projectId = isset($_GET['projectId']) && is_string($_GET['projectId']) ? $_GET['projectId'] : null;
+            JsonResponse::send([
+                'items' => $this->app->knowledge()->retrieval()->similarMissions($objective, $projectId),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/knowledge/similar/patches') {
+            $objective = isset($_GET['objective']) && is_string($_GET['objective']) ? $_GET['objective'] : '';
+            $projectId = isset($_GET['projectId']) && is_string($_GET['projectId']) ? $_GET['projectId'] : null;
+            JsonResponse::send([
+                'items' => $this->app->knowledge()->retrieval()->similarPatches($objective, $projectId),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/knowledge/retrieve') {
+            $this->requireCsrf();
+            $body = $this->jsonBody();
+            JsonResponse::send(['pack' => $this->app->knowledge()->retrievePreview($body)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/knowledge/capture') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['knowledge' => $this->app->knowledge()->captureManual($body, $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/knowledge/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->knowledge()->get($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Knowledge not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/knowledge/([A-Za-z0-9_-]+)/timeline$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->knowledge()->timeline($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/knowledge/([A-Za-z0-9_-]+)/archive$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $item = $this->app->knowledge()->archive($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Knowledge not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/knowledge/([A-Za-z0-9_-]+)/forget$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $item = $this->app->knowledge()->forget($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Knowledge not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/memory$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->knowledge()->missionMemory($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/missions/([A-Za-z0-9_-]+)/memory/retrieve$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $body = $this->jsonBody();
+            $body['missionId'] = $m[1];
+            if (!isset($body['objective']) || !is_string($body['objective']) || $body['objective'] === '') {
+                $body['objective'] = 'mission ' . $m[1];
+            }
+            JsonResponse::send(['pack' => $this->app->knowledge()->retrievePreview($body)]);
 
             return;
         }
@@ -593,7 +737,12 @@ final class HttpKernel
         if ($method === 'POST' && preg_match('#^/patches/([A-Za-z0-9_-]+)/seal$#', $path, $m) === 1) {
             $this->requireCsrf();
             $this->app->auth()->assertRole($user, Role::OPERATOR);
-            JsonResponse::send($this->app->patchPipeline()->seal($m[1])->toArray());
+            $sealed = $this->app->patchPipeline()->seal($m[1]);
+            try {
+                $this->app->knowledgeCapture()->capturePatchEvent($m[1], 'patch.sealed', $sealed->toArray());
+            } catch (\Throwable) {
+            }
+            JsonResponse::send($sealed->toArray());
 
             return;
         }
@@ -681,7 +830,12 @@ final class HttpKernel
         if ($method === 'POST' && preg_match('#^/workspaces/([A-Za-z0-9_-]+)/seal$#', $path, $m) === 1) {
             $this->requireCsrf();
             $this->app->auth()->assertRole($user, Role::OPERATOR);
-            JsonResponse::send($this->app->engineeringWorkspaces()->seal($m[1])->toArray());
+            $sealed = $this->app->engineeringWorkspaces()->seal($m[1]);
+            try {
+                $this->app->knowledgeCapture()->captureWorkspaceSeal($m[1], $sealed->toArray());
+            } catch (\Throwable) {
+            }
+            JsonResponse::send($sealed->toArray());
 
             return;
         }
