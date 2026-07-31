@@ -28,6 +28,8 @@ $testFiles = [
     __DIR__ . '/Infrastructure/Execution/OpenSshCommandRunnerTest.php',
     __DIR__ . '/Application/Workflow/WorkflowDslTest.php',
     __DIR__ . '/Infrastructure/Workflow/JsonFileWorkflowLibraryTest.php',
+    __DIR__ . '/Application/Artifact/ArtifactServiceTest.php',
+    __DIR__ . '/Infrastructure/Artifact/FilesystemArtifactTest.php',
 ];
 
 $passed = 0;
