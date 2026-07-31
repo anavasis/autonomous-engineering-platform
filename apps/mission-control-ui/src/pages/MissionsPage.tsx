@@ -22,11 +22,12 @@ export function MissionsPage() {
       <PageHeader
         title="Missions"
         description="Status, progress, and execution posture for every controlled engineering mission."
+        actions={<Link to="/missions/new" className="aep-btn aep-btn-primary">New Mission</Link>}
       />
       {items.length === 0 ? (
         <EmptyState
           title="No missions"
-          description="Missions created via the API will appear in this roster with live progress."
+          description="Use New Mission to describe work in natural language, preview the plan, and start."
         />
       ) : (
         <div className="aep-table-wrap">

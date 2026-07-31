@@ -19,6 +19,15 @@ use Aep\Application\MissionControl\Query\ValidationQueryService;
 use Aep\Application\MissionControl\Support\Utc;
 use Aep\Application\MissionEngine\DefaultMissionPlanFactory;
 use Aep\Application\MissionEngine\MissionEngine;
+use Aep\Application\MissionExecution\Service\AutonomousMissionService;
+use Aep\Application\MissionExecution\Service\ClarificationEngine;
+use Aep\Application\MissionExecution\Service\ContextAssembler;
+use Aep\Application\MissionExecution\Service\EngineeringMemoryService;
+use Aep\Application\MissionExecution\Service\LaunchFacade;
+use Aep\Application\MissionExecution\Service\MissionPlanner;
+use Aep\Application\MissionExecution\Service\MissionValidator;
+use Aep\Application\MissionExecution\Service\ParameterExtractor;
+use Aep\Application\MissionExecution\Service\WorkflowSelector;
 use Aep\Application\Project\ProjectCommandService;
 use Aep\Application\Validation\ValidationPipeline;
 use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
@@ -30,6 +39,11 @@ use Aep\Infrastructure\MissionControl\Catalog\JsonMissionCatalog;
 use Aep\Infrastructure\MissionControl\Catalog\JsonProjectCatalog;
 use Aep\Infrastructure\MissionControl\Catalog\JsonRunCatalog;
 use Aep\Infrastructure\MissionEngine\JsonFileMissionRunRepository;
+use Aep\Infrastructure\MissionExecution\Store\JsonConversationRepository;
+use Aep\Infrastructure\MissionExecution\Store\JsonIntakeRepository;
+use Aep\Infrastructure\MissionExecution\Store\JsonPlanRepository;
+use Aep\Infrastructure\MissionExecution\Store\JsonProjectMemoryRepository;
+use Aep\Infrastructure\MissionExecution\Understanding\HeuristicPromptUnderstanding;
 use Aep\Infrastructure\Persistence\JsonFileMissionRepository;
 use Aep\Infrastructure\Persistence\JsonFileProjectRepository;
 use Aep\Infrastructure\Validation\DeclarativeContextValidationStep;
@@ -48,9 +62,10 @@ final class MissionControlKernel
     private ValidationQueryService $validation;
     private MissionControlCommandFacade $commands;
     private HealthService $health;
+    private AutonomousMissionService $ame;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.1.0')
+    public function __construct(string $dataRoot, string $version = '0.2.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -63,8 +78,9 @@ final class MissionControlKernel
         $artifactsDir = $this->dataRoot . '/artifacts';
         $authDir = $this->dataRoot . '/auth';
         $sessionsDir = $authDir . '/sessions';
+        $ameDir = $this->dataRoot . '/ame';
 
-        foreach ([$missionsDir, $projectsDir, $runsDir, $artifactsDir, $authDir, $sessionsDir] as $dir) {
+        foreach ([$missionsDir, $projectsDir, $runsDir, $artifactsDir, $authDir, $sessionsDir, $ameDir] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
             }
@@ -127,6 +143,28 @@ final class MissionControlKernel
         );
         $this->commands = new MissionControlCommandFacade($missionCommands, $projectCommands, $engine);
 
+        $memoryRepo = new JsonProjectMemoryRepository($ameDir . '/memory');
+        $intakeRepo = new JsonIntakeRepository($ameDir . '/intakes');
+        $conversationRepo = new JsonConversationRepository($ameDir . '/conversations');
+        $planRepo = new JsonPlanRepository($ameDir . '/plans');
+        $this->ame = new AutonomousMissionService(
+            $intakeRepo,
+            $conversationRepo,
+            $planRepo,
+            $memoryRepo,
+            new HeuristicPromptUnderstanding(),
+            new ClarificationEngine(),
+            new MissionValidator(),
+            new MissionPlanner(
+                new WorkflowSelector(),
+                new ParameterExtractor(),
+                new ContextAssembler($missionCatalog, $memoryRepo)
+            ),
+            new LaunchFacade($missionCommands, $engine),
+            new EngineeringMemoryService($memoryRepo),
+            $this->projects
+        );
+
         $this->bootstrapAdmin();
     }
 
@@ -173,6 +211,11 @@ final class MissionControlKernel
     public function health(): HealthService
     {
         return $this->health;
+    }
+
+    public function ame(): AutonomousMissionService
+    {
+        return $this->ame;
     }
 
     public function dataRoot(): string

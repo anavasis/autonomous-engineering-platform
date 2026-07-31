@@ -1,16 +1,30 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/api/client';
 import { useArtifacts, useMission, useTimeline, useValidation } from '@/api/hooks';
 import {
+  Button,
   Drawer,
   EmptyState,
   PageHeader,
   Progress,
   Status,
   statusTone,
+  ToastHost,
 } from '@/design-system/ui';
 
-const TABS = ['summary', 'timeline', 'artifacts', 'logs', 'validation', 'checkpoints', 'reports'] as const;
+const TABS = [
+  'summary',
+  'plan',
+  'conversation',
+  'timeline',
+  'artifacts',
+  'logs',
+  'validation',
+  'checkpoints',
+  'reports',
+] as const;
 
 export function MissionDetailsPage() {
   const { missionId = '' } = useParams();
@@ -18,8 +32,21 @@ export function MissionDetailsPage() {
   const timeline = useTimeline(missionId);
   const artifacts = useArtifacts(missionId);
   const validation = useValidation();
+  const plan = useQuery({
+    queryKey: ['mission-plan', missionId],
+    queryFn: () => api<Record<string, unknown>>(`/missions/${missionId}/plan`),
+    enabled: Boolean(missionId),
+    retry: false,
+  });
+  const conversation = useQuery({
+    queryKey: ['mission-conversation', missionId],
+    queryFn: () => api<{ conversation: Record<string, unknown> | null }>(`/missions/${missionId}/conversation`),
+    enabled: Boolean(missionId),
+  });
   const [tab, setTab] = useState<(typeof TABS)[number]>('summary');
   const [selectedEvent, setSelectedEvent] = useState<Record<string, unknown> | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const validationRow = useMemo(
     () => (validation.data?.items ?? []).find((v) => v.missionId === missionId),
@@ -37,20 +64,56 @@ export function MissionDetailsPage() {
   const events = timeline.data?.items ?? [];
   const workspaces = artifacts.data?.items ?? [];
   const checkpoint = m.checkpoint as Record<string, unknown> | null;
+  const run = m.latestRun as Record<string, unknown> | null;
+  const explain = (plan.data?.explainability as Record<string, string> | undefined) ?? {};
+
+  async function retry() {
+    setBusy(true);
+    try {
+      const result = await api<Record<string, unknown>>(`/missions/${missionId}/retry`, { method: 'POST', body: '{}' });
+      setToast('Retry started: ' + String(result.runId));
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Retry failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resume() {
+    if (!run?.runId) return;
+    setBusy(true);
+    try {
+      const result = await api<Record<string, unknown>>(
+        `/missions/${missionId}/runs/${String(run.runId)}/resume`,
+        { method: 'POST', body: '{}' },
+      );
+      setToast('Resumed: ' + String(result.engineState));
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Resume failed');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div>
       <PageHeader
         title={String(m.id)}
         description={String(m.objective)}
-        actions={<Link to="/missions" className="aep-btn aep-btn-ghost">Back to missions</Link>}
+        actions={
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Button variant="ghost" onClick={() => void resume()} disabled={busy || !run?.runId}>Resume</Button>
+            <Button variant="ghost" onClick={() => void retry()} disabled={busy}>Retry</Button>
+            <Link to="/missions" className="aep-btn aep-btn-ghost">Back</Link>
+          </div>
+        }
       />
 
       <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <Status label={String(m.state)} tone={statusTone(String(m.state))} />
           <span className="aep-mono">step: {m.currentStep ? String(m.currentStep) : '—'}</span>
-          <span className="aep-mono">workflow: {m.workflow ? String(m.workflow) : 'default'}</span>
+          <span className="aep-mono">workflow: {m.workflow ? String(m.workflow) : plan.data?.workflowId ? String(plan.data.workflowId) : 'default'}</span>
         </div>
         <Progress value={Number(m.progress ?? 0)} />
       </div>
@@ -81,6 +144,59 @@ export function MissionDetailsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {tab === 'plan' && (
+        plan.data ? (
+          <div>
+            <div className="aep-table-wrap" style={{ marginBottom: '1rem' }}>
+              <table className="aep-table" style={{ minWidth: 0 }}>
+                <tbody>
+                  <tr><td>Workflow</td><td>{String(plan.data.workflow)}</td></tr>
+                  <tr><td>Affected areas</td><td>{(plan.data.affectedAreas as string[] | undefined)?.join(', ') || '—'}</td></tr>
+                  <tr><td>Constraints</td><td>{(plan.data.constraints as string[] | undefined)?.join(' · ') || '—'}</td></tr>
+                  <tr><td>Tests</td><td>{(plan.data.tests as string[] | undefined)?.join(' · ') || '—'}</td></tr>
+                  <tr><td>Approvals</td><td className="aep-mono">{JSON.stringify(plan.data.approvals)}</td></tr>
+                  <tr><td>Estimated duration</td><td>{String(plan.data.estimatedDuration)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <h3>Explainability</h3>
+            <div className="aep-table-wrap">
+              <table className="aep-table" style={{ minWidth: 0 }}>
+                <tbody>
+                  <tr><td>Why this workflow?</td><td>{explain.whyWorkflow ?? '—'}</td></tr>
+                  <tr><td>Why these files?</td><td>{explain.whyFiles ?? '—'}</td></tr>
+                  <tr><td>Why these tests?</td><td>{explain.whyTests ?? '—'}</td></tr>
+                  <tr><td>Why these approvals?</td><td>{explain.whyApprovals ?? '—'}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <h3>Estimated steps</h3>
+            <ol>
+              {((plan.data.estimatedSteps as Array<Record<string, string>>) ?? []).map((s) => (
+                <li key={s.id} className="aep-mono">{s.name}</li>
+              ))}
+            </ol>
+          </div>
+        ) : (
+          <EmptyState title="No execution plan" description="Plans appear for missions launched via Autonomous Mission Execution." />
+        )
+      )}
+
+      {tab === 'conversation' && (
+        (conversation.data?.conversation?.turns as Array<Record<string, unknown>> | undefined)?.length ? (
+          <div className="aep-timeline">
+            {(conversation.data?.conversation?.turns as Array<Record<string, unknown>>).map((t, i) => (
+              <div key={i} className="aep-timeline-item">
+                <div className="aep-mono" style={{ color: 'var(--aep-ink-faint)' }}>{String(t.role)} · {String(t.atUtc)}</div>
+                <div>{String(t.text)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No conversation" description="Conversation history is attached for NL-launched missions." />
+        )
       )}
 
       {tab === 'timeline' && (
@@ -183,6 +299,7 @@ export function MissionDetailsPage() {
           </pre>
         ) : null}
       </Drawer>
+      <ToastHost message={toast} onDismiss={() => setToast(null)} />
     </div>
   );
 }

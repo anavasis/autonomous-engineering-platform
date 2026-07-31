@@ -6,8 +6,9 @@ import { Button, Status, statusTone } from '@/design-system/ui';
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
+  { to: '/missions/new', label: 'New Mission' },
   { to: '/projects', label: 'Projects' },
-  { to: '/missions', label: 'Missions' },
+  { to: '/missions', label: 'Missions', end: true },
   { to: '/timeline', label: 'Timeline' },
   { to: '/artifacts', label: 'Artifacts' },
   { to: '/validation', label: 'Validation' },
@@ -54,7 +55,7 @@ export function AppShell() {
           ))}
         </nav>
         <div className="aep-sidebar-foot">
-          v0.1.0 · aep.anavasis.tech
+          v0.2.0 · aep.anavasis.tech
         </div>
       </aside>
 
