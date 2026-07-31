@@ -408,7 +408,7 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.6.0',
+                'version' => '0.7.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
@@ -419,6 +419,7 @@ final class HttpKernel
                     'engineeringWorkspaces' => true,
                     'codeReviewPatchPipeline' => true,
                     'engineeringKnowledgeMemory' => true,
+                    'autonomousPlanningScheduling' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
@@ -426,6 +427,7 @@ final class HttpKernel
                 'workspaces' => $this->app->workspaces()->settings(),
                 'patches' => $this->app->patches()->settings(),
                 'knowledge' => $this->app->knowledge()->settings(),
+                'planning' => $this->app->planning()->settings(),
             ]);
 
             return;
@@ -463,6 +465,246 @@ final class HttpKernel
             $this->app->auth()->assertRole($user, Role::OPERATOR);
             $body = $this->jsonBody();
             JsonResponse::send(['settings' => $this->app->knowledge()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/planning') {
+            JsonResponse::send(['settings' => $this->app->planning()->settings()]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/planning') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['settings' => $this->app->planning()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/planning/dashboard') {
+            JsonResponse::send($this->app->planning()->dashboard());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/programs') {
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            $projectId = isset($_GET['projectId']) && is_string($_GET['projectId']) ? $_GET['projectId'] : null;
+            JsonResponse::send(['items' => $this->app->planning()->list($status, $projectId)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/programs') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $hints = [];
+            try {
+                if (($this->app->planning()->settings()['knowledgeAssistedPlanning'] ?? true) === true) {
+                    $pack = $this->app->knowledge()->retrievePreview([
+                        'objective' => is_string($body['objective'] ?? null) ? $body['objective'] : '',
+                        'projectId' => $body['projectId'] ?? null,
+                        'mode' => 'preview',
+                        'limit' => 6,
+                    ]);
+                    $hints = is_array($pack['hits'] ?? null) ? $pack['hits'] : [];
+                }
+            } catch (\Throwable) {
+                $hints = [];
+            }
+            JsonResponse::send(['program' => $this->app->planning()->create($body, $hints)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/programs/scheduler/tick') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $programId = is_string($body['programId'] ?? null) ? $body['programId'] : '';
+            if ($programId === '') {
+                JsonResponse::problem('Bad Request', 400, 'programId is required.');
+
+                return;
+            }
+            JsonResponse::send($this->app->planning()->tick($programId, $user->id(), $this->planningCapacity()));
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->planning()->get($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/graph$#', $path, $m) === 1) {
+            $item = $this->app->planning()->graph($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send(['graph' => $item]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/dependencies$#', $path, $m) === 1) {
+            $item = $this->app->planning()->dependencies($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/critical-path$#', $path, $m) === 1) {
+            $item = $this->app->planning()->criticalPathView($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/schedule$#', $path, $m) === 1) {
+            $item = $this->app->planning()->schedule($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/allocations$#', $path, $m) === 1) {
+            $item = $this->app->planning()->allocations($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/queue$#', $path, $m) === 1) {
+            $item = $this->app->planning()->queue($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Program not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/timeline$#', $path, $m) === 1) {
+            JsonResponse::send(['items' => $this->app->planning()->timeline($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/plan$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['program' => $this->app->planning()->plan($m[1], $body)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/start$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->planning()->start($m[1], $user->id(), $this->planningCapacity()));
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/pause$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['program' => $this->app->planning()->pause($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/resume$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->planning()->resume($m[1], $user->id(), $this->planningCapacity()));
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/cancel$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['program' => $this->app->planning()->cancel($m[1])]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/replan/preview$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $body = $this->jsonBody();
+            $failed = is_string($body['failedNodeId'] ?? null) ? $body['failedNodeId'] : null;
+            JsonResponse::send($this->app->planning()->replanPreview($m[1], $failed));
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/programs/([A-Za-z0-9_-]+)/replan$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $failed = is_string($body['failedNodeId'] ?? null) ? $body['failedNodeId'] : null;
+            JsonResponse::send(['program' => $this->app->planning()->replan($m[1], $failed)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/program$#', $path, $m) === 1) {
+            $programId = null;
+            // reverse lookup via store through list scan of mission bindings in planning index is internal;
+            // expose via pipeline get if indexed — query service helper
+            $all = $this->app->planning()->list();
+            foreach ($all as $summary) {
+                $detail = $this->app->planning()->get(is_string($summary['programId'] ?? null) ? $summary['programId'] : '');
+                if (!is_array($detail)) {
+                    continue;
+                }
+                foreach (($detail['graph']['nodes'] ?? []) as $node) {
+                    if (is_array($node) && ($node['missionId'] ?? null) === $m[1]) {
+                        JsonResponse::send(['program' => $detail]);
+
+                        return;
+                    }
+                }
+            }
+            JsonResponse::send(['program' => null]);
 
             return;
         }
@@ -1064,6 +1306,22 @@ final class HttpKernel
             'samesite' => 'Lax',
         ]);
         unset($_COOKIE[AuthService::COOKIE_NAME]);
+    }
+
+    /** @return array<string, mixed> */
+    private function planningCapacity(): array
+    {
+        $execution = $this->app->execution()->settings();
+        $workspaces = $this->app->workspaces()->settings();
+
+        return [
+            'executionSettings' => $execution,
+            'workspaceSettings' => $workspaces,
+            'defaultProviderId' => $execution['defaultProviderId'] ?? null,
+            'enabledProviderIds' => $execution['enabledProviderIds'] ?? [],
+            'workspacesInUse' => 0,
+            'spentCostUnits' => 0.0,
+        ];
     }
 
     /** @return array<string, mixed> */

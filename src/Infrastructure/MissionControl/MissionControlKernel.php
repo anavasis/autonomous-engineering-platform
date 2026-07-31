@@ -36,6 +36,19 @@ use Aep\Application\Knowledge\Service\KnowledgeQueryService;
 use Aep\Application\Knowledge\Service\KnowledgeRanker;
 use Aep\Application\Knowledge\Service\KnowledgeRetrievalService;
 use Aep\Application\Mission\MissionCommandService;
+use Aep\Application\Planning\Policy\SchedulingPolicyFactory;
+use Aep\Application\Planning\Service\CriticalPathAnalyzer;
+use Aep\Application\Planning\Service\DependencyManager;
+use Aep\Application\Planning\Service\EstimateService;
+use Aep\Application\Planning\Service\FailureRecoveryPolicy;
+use Aep\Application\Planning\Service\PlanningPipelineService;
+use Aep\Application\Planning\Service\PlanningQueryService;
+use Aep\Application\Planning\Service\ProgramPlanner;
+use Aep\Application\Planning\Service\ProviderAllocator;
+use Aep\Application\Planning\Service\Replanner;
+use Aep\Application\Planning\Service\ResourceAllocator;
+use Aep\Application\Planning\Service\Scheduler;
+use Aep\Application\Planning\Service\WorkspaceAllocator;
 use Aep\Application\MissionControl\Auth\AuthService;
 use Aep\Application\MissionControl\Command\MissionControlCommandFacade;
 use Aep\Application\MissionControl\Health\HealthService;
@@ -85,6 +98,10 @@ use Aep\Infrastructure\Knowledge\Embedding\StubEmbeddingProvider;
 use Aep\Infrastructure\Knowledge\Provider\ConfigEmbeddingProviderRegistry;
 use Aep\Infrastructure\Knowledge\Store\FilesystemKnowledgeStore;
 use Aep\Infrastructure\Knowledge\Store\JsonKnowledgeSettingsStore;
+use Aep\Infrastructure\Planning\Adapter\PlanningKnowledgeAdapter;
+use Aep\Infrastructure\Planning\Adapter\PlanningLaunchAdapter;
+use Aep\Infrastructure\Planning\Store\FilesystemProgramStore;
+use Aep\Infrastructure\Planning\Store\JsonPlanningSettingsStore;
 use Aep\Infrastructure\MissionControl\Auth\FileSessionStore;
 use Aep\Infrastructure\MissionControl\Auth\JsonUserStore;
 use Aep\Infrastructure\MissionControl\Catalog\JsonMissionCatalog;
@@ -123,9 +140,10 @@ final class MissionControlKernel
     private PatchQueryService $patchQuery;
     private KnowledgeQueryService $knowledgeQuery;
     private KnowledgeCaptureService $knowledgeCapture;
+    private PlanningQueryService $planningQuery;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.6.0')
+    public function __construct(string $dataRoot, string $version = '0.7.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -144,6 +162,7 @@ final class MissionControlKernel
         $gitCacheDir = $this->dataRoot . '/git-cache';
         $patchesDir = $this->dataRoot . '/patches';
         $knowledgeDir = $this->dataRoot . '/knowledge';
+        $planningDir = $this->dataRoot . '/planning';
 
         foreach ([
             $missionsDir,
@@ -158,6 +177,7 @@ final class MissionControlKernel
             $gitCacheDir,
             $patchesDir,
             $knowledgeDir,
+            $planningDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -358,6 +378,47 @@ final class MissionControlKernel
             $this->projects
         );
 
+        $planningSettings = new JsonPlanningSettingsStore($planningDir);
+        $programStore = new FilesystemProgramStore($planningDir);
+        $deps = new DependencyManager();
+        $estimates = new EstimateService();
+        $criticalPath = new CriticalPathAnalyzer();
+        $programPlanner = new ProgramPlanner($deps, $estimates, $criticalPath, $programStore);
+        $replanner = new Replanner($programStore, $programPlanner, $deps, $estimates, $criticalPath);
+        $schedulingPolicies = SchedulingPolicyFactory::fromSettings($planningSettings->get());
+        $scheduler = new Scheduler(
+            $programStore,
+            $planningSettings,
+            $schedulingPolicies,
+            $deps,
+            new ResourceAllocator(),
+            new ProviderAllocator(),
+            new WorkspaceAllocator(),
+            new FailureRecoveryPolicy(),
+            new PlanningLaunchAdapter($missionCommands, $engine),
+            $criticalPath,
+            $replanner,
+        );
+        $planningPipeline = new PlanningPipelineService(
+            $programStore,
+            $planningSettings,
+            $programPlanner,
+            $scheduler,
+            $replanner,
+            $deps,
+            $criticalPath,
+        );
+        $this->planningQuery = new PlanningQueryService(
+            $planningPipeline,
+            $planningSettings,
+            $deps,
+            $criticalPath,
+            new ResourceAllocator(),
+            new WorkspaceAllocator(),
+        );
+        // Keep knowledge adapter available for future plan-time enrichment without coupling planner ctor.
+        new PlanningKnowledgeAdapter($this->knowledgeQuery);
+
         $this->bootstrapAdmin();
     }
 
@@ -449,6 +510,11 @@ final class MissionControlKernel
     public function knowledgeCapture(): KnowledgeCaptureService
     {
         return $this->knowledgeCapture;
+    }
+
+    public function planning(): PlanningQueryService
+    {
+        return $this->planningQuery;
     }
 
     public function dataRoot(): string

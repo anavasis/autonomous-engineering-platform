@@ -367,6 +367,89 @@ export function useMissionMemory(missionId: string) {
   });
 }
 
+export function usePlanningDashboard() {
+  return useQuery({
+    queryKey: ['planning-dashboard'],
+    queryFn: () => api<{
+      programCount: number;
+      queueDepth: number;
+      blocked: number;
+      byStatus: Record<string, number>;
+      items: Array<Record<string, unknown>>;
+    }>('/planning/dashboard'),
+    refetchInterval: 5000,
+  });
+}
+
+export function usePrograms(status?: string) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return useQuery({
+    queryKey: ['programs', status ?? ''],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/programs${qs}`),
+    refetchInterval: 4000,
+  });
+}
+
+export function useProgram(programId: string) {
+  return useQuery({
+    queryKey: ['program', programId],
+    queryFn: () => api<Record<string, unknown>>(`/programs/${programId}`),
+    enabled: Boolean(programId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useProgramDependencies(programId: string) {
+  return useQuery({
+    queryKey: ['program-deps', programId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>>; waves: unknown }>(`/programs/${programId}/dependencies`),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useProgramCriticalPath(programId: string) {
+  return useQuery({
+    queryKey: ['program-critical', programId],
+    queryFn: () => api<Record<string, unknown>>(`/programs/${programId}/critical-path`),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useProgramSchedule(programId: string) {
+  return useQuery({
+    queryKey: ['program-schedule', programId],
+    queryFn: () => api<Record<string, unknown>>(`/programs/${programId}/schedule`),
+    enabled: Boolean(programId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useProgramAllocations(programId: string) {
+  return useQuery({
+    queryKey: ['program-allocations', programId],
+    queryFn: () => api<Record<string, unknown>>(`/programs/${programId}/allocations`),
+    enabled: Boolean(programId),
+  });
+}
+
+export function useProgramQueue(programId: string) {
+  return useQuery({
+    queryKey: ['program-queue', programId],
+    queryFn: () => api<Record<string, unknown>>(`/programs/${programId}/queue`),
+    enabled: Boolean(programId),
+    refetchInterval: 3500,
+  });
+}
+
+export function useProgramTimeline(programId: string) {
+  return useQuery({
+    queryKey: ['program-timeline', programId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/programs/${programId}/timeline`),
+    enabled: Boolean(programId),
+    refetchInterval: 4000,
+  });
+}
+
 export function useApprovalDecision() {
   const qc = useQueryClient();
   return useMutation({
