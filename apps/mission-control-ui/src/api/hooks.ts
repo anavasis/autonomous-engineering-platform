@@ -234,6 +234,74 @@ export function useWorkspaceSettings() {
   });
 }
 
+export function usePatches(missionId?: string) {
+  const q = missionId ? `?missionId=${encodeURIComponent(missionId)}` : '';
+  return useQuery({
+    queryKey: ['patches', missionId ?? 'all'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/patches${q}`),
+    refetchInterval: 4000,
+  });
+}
+
+export function usePatch(patchId: string) {
+  return useQuery({
+    queryKey: ['patch', patchId],
+    queryFn: () => api<Record<string, unknown>>(`/patches/${patchId}`),
+    enabled: Boolean(patchId),
+    refetchInterval: 3500,
+  });
+}
+
+export function usePatchDiff(patchId: string) {
+  return useQuery({
+    queryKey: ['patch-diff', patchId],
+    queryFn: () => api<{ diff: string; diffHash: string }>(`/patches/${patchId}/diff`),
+    enabled: Boolean(patchId),
+  });
+}
+
+export function usePatchChecks(patchId: string) {
+  return useQuery({
+    queryKey: ['patch-checks', patchId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/patches/${patchId}/checks`),
+    enabled: Boolean(patchId),
+  });
+}
+
+export function usePatchReviews(patchId: string) {
+  return useQuery({
+    queryKey: ['patch-reviews', patchId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/patches/${patchId}/reviews`),
+    enabled: Boolean(patchId),
+  });
+}
+
+export function usePatchTimeline(patchId: string) {
+  return useQuery({
+    queryKey: ['patch-timeline', patchId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/patches/${patchId}/timeline`),
+    enabled: Boolean(patchId),
+    refetchInterval: 4000,
+  });
+}
+
+export function usePatchReadiness(patchId: string) {
+  return useQuery({
+    queryKey: ['patch-readiness', patchId],
+    queryFn: () => api<Record<string, unknown>>(`/patches/${patchId}/readiness`),
+    enabled: Boolean(patchId),
+    refetchInterval: 4000,
+  });
+}
+
+export function useReviewQueue() {
+  return useQuery({
+    queryKey: ['review-queue'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/reviews/queue'),
+    refetchInterval: 4000,
+  });
+}
+
 export function useApprovalDecision() {
   const qc = useQueryClient();
   return useMutation({

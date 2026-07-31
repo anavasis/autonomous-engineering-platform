@@ -11,6 +11,7 @@ import {
   useMission,
   useMissionExecution,
   useMissionWorkspace,
+  usePatches,
   useTimeline,
   useValidation,
 } from '@/api/hooks';
@@ -32,6 +33,7 @@ const TABS = [
   'timeline',
   'execution',
   'workspace',
+  'patches',
   'artifacts',
   'logs',
   'validation',
@@ -63,6 +65,7 @@ export function MissionDetailsPage() {
   const execPrompt = useExecutionPrompt(sessionId);
   const execMetrics = useExecutionMetrics(sessionId);
   const missionWorkspace = useMissionWorkspace(missionId);
+  const missionPatches = usePatches(missionId);
   const [tab, setTab] = useState<(typeof TABS)[number]>('summary');
   const [selectedEvent, setSelectedEvent] = useState<Record<string, unknown> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -307,6 +310,28 @@ export function MissionDetailsPage() {
           </div>
         ) : (
           <EmptyState title="No engineering workspace" description="A workspace is created when provider-backed execution provisions isolation for this mission." />
+        )
+      )}
+
+      {tab === 'patches' && (
+        (missionPatches.data?.items ?? []).length ? (
+          <div className="aep-table-wrap">
+            <table className="aep-table">
+              <thead><tr><th>Patch</th><th>Status</th><th>Score</th><th>Ready</th></tr></thead>
+              <tbody>
+                {(missionPatches.data?.items ?? []).map((p) => (
+                  <tr key={String(p.patchId)}>
+                    <td><Link to="/patches" className="aep-mono">{String(p.patchId)}</Link></td>
+                    <td><Status label={String(p.status)} tone={statusTone(String(p.status))} /></td>
+                    <td className="aep-mono">{String(p.score)} ({String(p.grade)})</td>
+                    <td>{String(p.mergeReady)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No patches" description="Patches appear after provider-backed execution creates a reviewable change set." />
         )
       )}
 

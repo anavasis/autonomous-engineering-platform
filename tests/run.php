@@ -41,6 +41,8 @@ $testFiles = [
     __DIR__ . '/Infrastructure/EngineeringExecution/ProviderRoutingExecutorTest.php',
     __DIR__ . '/Application/EngineeringWorkspace/EngineeringWorkspaceServiceTest.php',
     __DIR__ . '/Infrastructure/EngineeringWorkspace/FilesystemEngineeringWorkspaceStoreTest.php',
+    __DIR__ . '/Application/CodeReview/PatchPipelineServiceTest.php',
+    __DIR__ . '/Infrastructure/CodeReview/FilesystemPatchStoreTest.php',
 ];
 
 $passed = 0;

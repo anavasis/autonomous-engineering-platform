@@ -5,6 +5,17 @@ declare(strict_types=1);
 namespace Aep\Infrastructure\MissionControl;
 
 use Aep\Application\Artifact\ArtifactService;
+use Aep\Application\CodeReview\Policy\PatchPolicyFactory;
+use Aep\Application\CodeReview\Service\ChangeManifestBuilder;
+use Aep\Application\CodeReview\Service\ConflictDetector;
+use Aep\Application\CodeReview\Service\DiffValidator;
+use Aep\Application\CodeReview\Service\MergeReadinessEvaluator;
+use Aep\Application\CodeReview\Service\PatchPipelineService;
+use Aep\Application\CodeReview\Service\PatchQueryService;
+use Aep\Application\CodeReview\Service\PatchScorer;
+use Aep\Application\CodeReview\Service\SelfReviewOrchestrator;
+use Aep\Application\CodeReview\Service\StaticAnalysisRunner;
+use Aep\Application\CodeReview\Service\TestExecutionRunner;
 use Aep\Application\EngineeringExecution\Service\ArtifactCapture;
 use Aep\Application\EngineeringExecution\Service\ContextPackager;
 use Aep\Application\EngineeringExecution\Service\DiffCollector;
@@ -42,6 +53,12 @@ use Aep\Application\Project\ProjectCommandService;
 use Aep\Application\Validation\ValidationPipeline;
 use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
 use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
+use Aep\Infrastructure\CodeReview\Adapter\PatchCreationAdapter;
+use Aep\Infrastructure\CodeReview\Provider\ConfigReviewProviderRegistry;
+use Aep\Infrastructure\CodeReview\Provider\HeuristicLocalReviewProvider;
+use Aep\Infrastructure\CodeReview\Provider\StubReviewProvider;
+use Aep\Infrastructure\CodeReview\Store\FilesystemPatchStore;
+use Aep\Infrastructure\CodeReview\Store\JsonPatchSettingsStore;
 use Aep\Infrastructure\EngineeringExecution\Bridge\LegacyExecutorBridgeProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
@@ -87,9 +104,11 @@ final class MissionControlKernel
     private EngineeringExecutionOrchestrator $executionOrchestrator;
     private EngineeringWorkspaceService $engineeringWorkspaces;
     private WorkspaceQueryService $workspaceQuery;
+    private PatchPipelineService $patchPipeline;
+    private PatchQueryService $patchQuery;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.4.0')
+    public function __construct(string $dataRoot, string $version = '0.5.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -106,6 +125,7 @@ final class MissionControlKernel
         $executionDir = $this->dataRoot . '/execution';
         $workspacesDir = $this->dataRoot . '/workspaces';
         $gitCacheDir = $this->dataRoot . '/git-cache';
+        $patchesDir = $this->dataRoot . '/patches';
 
         foreach ([
             $missionsDir,
@@ -118,6 +138,7 @@ final class MissionControlKernel
             $executionDir,
             $workspacesDir,
             $gitCacheDir,
+            $patchesDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -171,8 +192,36 @@ final class MissionControlKernel
         );
         $this->executionQuery = new EngineeringExecutionQueryService($registry, $sessionStore, $settingsStore);
 
+        $patchSettings = new JsonPatchSettingsStore($patchesDir);
+        $reviewConfig = $this->loadReviewProviderConfig();
+        $reviewRegistry = new ConfigReviewProviderRegistry($reviewConfig, [
+            'heuristic-local' => static fn (array $o): HeuristicLocalReviewProvider => new HeuristicLocalReviewProvider($o),
+            'stub-review' => static fn (array $o): StubReviewProvider => new StubReviewProvider($o),
+        ]);
+        $policySet = PatchPolicyFactory::fromSettings($patchSettings->get());
+        $this->patchPipeline = new PatchPipelineService(
+            new FilesystemPatchStore($patchesDir),
+            $patchSettings,
+            new ChangeManifestBuilder(),
+            new DiffValidator(),
+            new StaticAnalysisRunner(),
+            new TestExecutionRunner(dirname(__DIR__, 3) . '/tests/run.php'),
+            new PatchScorer(),
+            new SelfReviewOrchestrator($reviewRegistry),
+            new MergeReadinessEvaluator($policySet),
+            new ConflictDetector(),
+        );
+        $this->patchQuery = new PatchQueryService($this->patchPipeline, $patchSettings, $reviewRegistry);
+
+        $routing = new ProviderRoutingExecutor($legacyLocal, $this->executionOrchestrator, $settingsStore);
         $execution = new ExecutionService(
-            new ProviderRoutingExecutor($legacyLocal, $this->executionOrchestrator, $settingsStore)
+            new PatchCreationAdapter(
+                $routing,
+                $this->patchPipeline,
+                $patchSettings,
+                $sessionStore,
+                $this->engineeringWorkspaces,
+            )
         );
         $validationPipeline = new ValidationPipeline([new DeclarativeContextValidationStep()]);
         $engine = new MissionEngine(
@@ -311,9 +360,46 @@ final class MissionControlKernel
         return $this->engineeringWorkspaces;
     }
 
+    public function patches(): PatchQueryService
+    {
+        return $this->patchQuery;
+    }
+
+    public function patchPipeline(): PatchPipelineService
+    {
+        return $this->patchPipeline;
+    }
+
     public function dataRoot(): string
     {
         return $this->dataRoot;
+    }
+
+    /** @return array<string, mixed> */
+    private function loadReviewProviderConfig(): array
+    {
+        $configured = getenv('AEP_REVIEW_PROVIDERS_CONFIG');
+        $path = is_string($configured) && $configured !== ''
+            ? $configured
+            : dirname(__DIR__, 3) . '/deploy/review-providers.json';
+        if (!is_file($path)) {
+            return [
+                'providers' => [
+                    [
+                        'id' => 'heuristic-local',
+                        'type' => 'heuristic-local',
+                        'enabled' => true,
+                        'displayName' => 'Heuristic Local Review',
+                    ],
+                ],
+            ];
+        }
+        $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($data)) {
+            throw new \RuntimeException('Invalid review providers config.');
+        }
+
+        return $data;
     }
 
     /** @return array<string, mixed> */
