@@ -8,6 +8,14 @@ use Aep\Application\Agent\Policy\AgentPolicyFactory;
 use Aep\Application\Agent\Service\AgentCoordinator;
 use Aep\Application\Agent\Service\AgentQueryService;
 use Aep\Application\Agent\Service\AgentRouter;
+use Aep\Application\Optimization\Model\CostModel;
+use Aep\Application\Optimization\Service\BudgetManager;
+use Aep\Application\Optimization\Service\CapacityManager;
+use Aep\Application\Optimization\Service\CapacityPlanner;
+use Aep\Application\Optimization\Service\OptimizationEngine;
+use Aep\Application\Optimization\Service\OptimizationQueryService;
+use Aep\Application\Optimization\Service\ResourceAllocator as OptimizationResourceAllocator;
+use Aep\Application\Optimization\Service\ResourceManager;
 use Aep\Application\Artifact\ArtifactService;
 use Aep\Application\CodeReview\Policy\PatchPolicyFactory;
 use Aep\Application\CodeReview\Service\ChangeManifestBuilder;
@@ -80,6 +88,10 @@ use Aep\Infrastructure\Agent\Adapter\AgentAssignmentAdapter;
 use Aep\Infrastructure\Agent\Registry\ConfigAgentRegistry;
 use Aep\Infrastructure\Agent\Store\FilesystemAgentStore;
 use Aep\Infrastructure\Agent\Store\JsonAgentSettingsStore;
+use Aep\Infrastructure\Optimization\Adapter\OptimizationPlanningAdapter;
+use Aep\Infrastructure\Optimization\Adapter\OptimizationProviderAdapter;
+use Aep\Infrastructure\Optimization\Store\FilesystemOptimizationStore;
+use Aep\Infrastructure\Optimization\Store\JsonOptimizationSettingsStore;
 use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
 use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
 use Aep\Infrastructure\CodeReview\Adapter\PatchCreationAdapter;
@@ -150,9 +162,10 @@ final class MissionControlKernel
     private KnowledgeCaptureService $knowledgeCapture;
     private PlanningQueryService $planningQuery;
     private AgentQueryService $agentQuery;
+    private OptimizationQueryService $optimizationQuery;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.8.0')
+    public function __construct(string $dataRoot, string $version = '0.9.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -173,6 +186,7 @@ final class MissionControlKernel
         $knowledgeDir = $this->dataRoot . '/knowledge';
         $planningDir = $this->dataRoot . '/planning';
         $agentsDir = $this->dataRoot . '/agents';
+        $optimizationDir = $this->dataRoot . '/optimization';
 
         foreach ([
             $missionsDir,
@@ -189,6 +203,7 @@ final class MissionControlKernel
             $knowledgeDir,
             $planningDir,
             $agentsDir,
+            $optimizationDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -305,12 +320,46 @@ final class MissionControlKernel
             $embeddingRegistry,
         );
 
+        $optimizationSettings = new JsonOptimizationSettingsStore($optimizationDir);
+        $optimizationStore = new FilesystemOptimizationStore($optimizationDir);
+        $optimizationConfig = $this->loadOptimizationConfig();
+        $resourceManager = new ResourceManager($optimizationStore);
+        $resourceManager->seedFromConfig($optimizationConfig);
+        $capacityManager = new CapacityManager($optimizationStore, $optimizationSettings);
+        $capacityManager->seedFromConfig($optimizationConfig);
+        foreach (is_array($optimizationConfig['costModels'] ?? null) ? $optimizationConfig['costModels'] : [] as $cm) {
+            if (is_array($cm) && is_string($cm['providerId'] ?? null)) {
+                $optimizationStore->saveCostModel(CostModel::fromArray($cm));
+            }
+        }
+        $budgetManager = new BudgetManager($optimizationStore, $optimizationSettings);
+        $budgetManager->ensureDefaults();
+        $capacityPlanner = new CapacityPlanner($optimizationStore);
+        $optAllocator = new OptimizationResourceAllocator($capacityManager, $budgetManager);
+        $optimizationEngine = new OptimizationEngine(
+            $optimizationStore,
+            $optimizationSettings,
+            $budgetManager,
+            $capacityManager,
+            $capacityPlanner,
+            $optAllocator,
+        );
+        $this->optimizationQuery = new OptimizationQueryService(
+            $optimizationStore,
+            $optimizationSettings,
+            $optimizationEngine,
+            $resourceManager,
+            $capacityManager,
+            $budgetManager,
+        );
+
         $routing = new ProviderRoutingExecutor($legacyLocal, $this->executionOrchestrator, $settingsStore);
+        $optimizedRouting = new OptimizationProviderAdapter($routing, $optimizationEngine, $optimizationSettings);
         $execution = new ExecutionService(
             new KnowledgeCaptureAdapter(
                 new PatchCreationAdapter(
                     new KnowledgeRetrievalAdapter(
-                        $routing,
+                        $optimizedRouting,
                         $knowledgeRetrieval,
                         $knowledgeSettings,
                     ),
@@ -415,10 +464,14 @@ final class MissionControlKernel
             new ProviderAllocator(),
             new WorkspaceAllocator(),
             new FailureRecoveryPolicy(),
-            new AgentAssignmentAdapter(
-                new PlanningLaunchAdapter($missionCommands, $engine),
-                $agentCoordinator,
-                $agentSettings,
+            new OptimizationPlanningAdapter(
+                new AgentAssignmentAdapter(
+                    new PlanningLaunchAdapter($missionCommands, $engine),
+                    $agentCoordinator,
+                    $agentSettings,
+                ),
+                $optimizationEngine,
+                $optimizationSettings,
             ),
             $criticalPath,
             $replanner,
@@ -546,6 +599,11 @@ final class MissionControlKernel
         return $this->agentQuery;
     }
 
+    public function optimization(): OptimizationQueryService
+    {
+        return $this->optimizationQuery;
+    }
+
     public function dataRoot(): string
     {
         return $this->dataRoot;
@@ -570,6 +628,21 @@ final class MissionControlKernel
     }
 
     /** @return array<string, mixed> */
+    /** @return array<string, mixed> */
+    private function loadOptimizationConfig(): array
+    {
+        $path = getenv('AEP_OPTIMIZATION_CONFIG') ?: (dirname(__DIR__, 3) . '/deploy/optimization.json');
+        if (!is_file($path)) {
+            return ['resources' => [], 'providers' => [], 'costModels' => [], 'agents' => [], 'workspace' => []];
+        }
+        $data = json_decode((string) file_get_contents($path), true);
+        if (!is_array($data)) {
+            throw new \RuntimeException('Invalid optimization config.');
+        }
+
+        return $data;
+    }
+
     private function loadEmbeddingProviderConfig(): array
     {
         $configured = getenv('AEP_EMBEDDING_PROVIDERS_CONFIG');

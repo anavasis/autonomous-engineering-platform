@@ -408,7 +408,7 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.8.0',
+                'version' => '0.9.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
@@ -421,6 +421,7 @@ final class HttpKernel
                     'engineeringKnowledgeMemory' => true,
                     'autonomousPlanningScheduling' => true,
                     'multiAgentCollaboration' => true,
+                    'resourceCostCapacityOptimization' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
@@ -430,6 +431,7 @@ final class HttpKernel
                 'knowledge' => $this->app->knowledge()->settings(),
                 'planning' => $this->app->planning()->settings(),
                 'agents' => $this->app->agents()->settings(),
+                'optimization' => $this->app->optimization()->settings(),
             ]);
 
             return;
@@ -659,6 +661,191 @@ final class HttpKernel
 
         if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/assignments$#', $path, $m) === 1) {
             JsonResponse::send(['items' => $this->app->agents()->assignments(null, $m[1])]);
+
+            return;
+        }
+
+
+        if ($method === 'GET' && $path === '/settings/optimization') {
+            JsonResponse::send(['settings' => $this->app->optimization()->settings()]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/optimization') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send(['settings' => $this->app->optimization()->updateSettings($body)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/optimization/dashboard') {
+            JsonResponse::send($this->app->optimization()->dashboard());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/resources') {
+            JsonResponse::send(['items' => $this->app->optimization()->resources()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/capacity') {
+            JsonResponse::send($this->app->optimization()->capacity());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/capacity/providers') {
+            JsonResponse::send(['items' => $this->app->optimization()->capacity()['providers'] ?? []]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/capacity/agents') {
+            JsonResponse::send(['items' => $this->app->optimization()->capacity()['agents'] ?? []]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/capacity/workspaces') {
+            JsonResponse::send($this->app->optimization()->capacity()['workspaces'] ?? []);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/capacity/reserve') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $providerId = is_string($body['providerId'] ?? null) ? $body['providerId'] : 'local-agent';
+            $ownerId = is_string($body['ownerId'] ?? null) ? $body['ownerId'] : 'manual';
+            $reservation = $this->app->optimization()->capacityManager()->reserveProvider($providerId, $ownerId);
+            if ($reservation === null) {
+                JsonResponse::problem('Conflict', 409, 'Unable to reserve capacity.');
+
+                return;
+            }
+            JsonResponse::send(['reservation' => $reservation->toArray()]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/capacity/([A-Za-z0-9_-]+)/release$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $released = $this->app->optimization()->capacityManager()->release($m[1]);
+            if ($released === null) {
+                JsonResponse::problem('Not Found', 404, 'Reservation not found.');
+
+                return;
+            }
+            JsonResponse::send(['reservation' => $released->toArray()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/budgets') {
+            JsonResponse::send($this->app->optimization()->budgets());
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/budgets') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->optimization()->updateBudgets($this->jsonBody()));
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/costs') {
+            $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 100;
+            JsonResponse::send(['items' => $this->app->optimization()->costs($limit)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/costs/forecast') {
+            JsonResponse::send($this->app->optimization()->forecast());
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/costs/providers/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $items = array_values(array_filter(
+                $this->app->optimization()->costs(200),
+                static fn (array $c): bool => ($c['providerId'] ?? null) === $m[1]
+            ));
+            JsonResponse::send(['providerId' => $m[1], 'items' => $items]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/optimization/providers/ranking') {
+            JsonResponse::send(['items' => $this->app->optimization()->providerRanking()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/optimization/agents/ranking') {
+            JsonResponse::send(['items' => $this->app->optimization()->agentRanking()]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/optimization/decide') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $reserve = ($body['reserve'] ?? false) === true;
+            JsonResponse::send(['decision' => $this->app->optimization()->decide($body, $reserve)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/optimization/decisions') {
+            JsonResponse::send(['items' => $this->app->optimization()->decisions()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/optimization/timeline') {
+            $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 100;
+            JsonResponse::send(['items' => $this->app->optimization()->timeline($limit)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/optimization/metrics') {
+            JsonResponse::send($this->app->optimization()->metrics());
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/programs/([A-Za-z0-9_-]+)/optimization$#', $path, $m) === 1) {
+            $items = array_values(array_filter(
+                $this->app->optimization()->decisions(100),
+                static fn (array $d): bool => ($d['programId'] ?? null) === $m[1]
+            ));
+            JsonResponse::send(['items' => $items]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/optimization$#', $path, $m) === 1) {
+            $items = array_values(array_filter(
+                $this->app->optimization()->decisions(100),
+                static fn (array $d): bool => ($d['missionId'] ?? null) === $m[1]
+            ));
+            $costs = array_values(array_filter(
+                $this->app->optimization()->costs(100),
+                static fn (array $c): bool => ($c['missionId'] ?? null) === $m[1]
+            ));
+            JsonResponse::send(['decisions' => $items, 'costs' => $costs]);
 
             return;
         }
@@ -1492,14 +1679,16 @@ final class HttpKernel
     {
         $execution = $this->app->execution()->settings();
         $workspaces = $this->app->workspaces()->settings();
+        $feed = $this->app->optimization()->planningCapacityFeed();
 
         return [
             'executionSettings' => $execution,
             'workspaceSettings' => $workspaces,
             'defaultProviderId' => $execution['defaultProviderId'] ?? null,
             'enabledProviderIds' => $execution['enabledProviderIds'] ?? [],
-            'workspacesInUse' => 0,
-            'spentCostUnits' => 0.0,
+            'workspacesInUse' => $feed['workspacesInUse'],
+            'spentCostUnits' => $feed['spentCostUnits'],
+            'optimization' => $this->app->optimization()->settings(),
         ];
     }
 

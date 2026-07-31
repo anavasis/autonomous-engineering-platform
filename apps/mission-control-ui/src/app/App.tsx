@@ -18,6 +18,7 @@ import { PatchesPage } from '@/pages/PatchesPage';
 import { KnowledgePage } from '@/pages/KnowledgePage';
 import { PlanningPage } from '@/pages/PlanningPage';
 import { AgentsPage } from '@/pages/AgentsPage';
+import { ResourcesPage } from '@/pages/ResourcesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +49,7 @@ export function App() {
               <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="planning" element={<PlanningPage />} />
               <Route path="agents" element={<AgentsPage />} />
+              <Route path="resources" element={<ResourcesPage />} />
               <Route path="validation" element={<ValidationPage />} />
               <Route path="approvals" element={<ApprovalsPage />} />
               <Route path="settings" element={<SettingsPage />} />
