@@ -13,10 +13,23 @@ $testFiles = [
     __DIR__ . '/Domain/MissionLifecycleTest.php',
     __DIR__ . '/Domain/MissionInvariantsTest.php',
     __DIR__ . '/Domain/MissionEventsTest.php',
+    __DIR__ . '/Domain/ProjectLifecycleTest.php',
     __DIR__ . '/Application/MissionCommandServiceTest.php',
     __DIR__ . '/Application/ValidationPipelineTest.php',
     __DIR__ . '/Application/ExecutionServiceTest.php',
+    __DIR__ . '/Application/ProjectCommandServiceTest.php',
+    __DIR__ . '/Application/GitServiceTest.php',
+    __DIR__ . '/Application/MissionEngineTest.php',
     __DIR__ . '/Infrastructure/JsonFileMissionRepositoryTest.php',
+    __DIR__ . '/Infrastructure/JsonFileProjectRepositoryTest.php',
+    __DIR__ . '/Infrastructure/GitCliAdapterTest.php',
+    __DIR__ . '/Infrastructure/MissionEngineRepositoryTest.php',
+    __DIR__ . '/Infrastructure/Execution/SshExecutorTest.php',
+    __DIR__ . '/Infrastructure/Execution/OpenSshCommandRunnerTest.php',
+    __DIR__ . '/Application/Workflow/WorkflowDslTest.php',
+    __DIR__ . '/Infrastructure/Workflow/JsonFileWorkflowLibraryTest.php',
+    __DIR__ . '/Application/Artifact/ArtifactServiceTest.php',
+    __DIR__ . '/Infrastructure/Artifact/FilesystemArtifactTest.php',
 ];
 
 $passed = 0;
@@ -25,14 +38,11 @@ $failures = [];
 
 foreach ($testFiles as $file) {
     require_once $file;
-    $base = basename($file, '.php');
-    if (str_contains($file, '/Application/')) {
-        $class = 'Tests\\Application\\' . $base;
-    } elseif (str_contains($file, '/Infrastructure/')) {
-        $class = 'Tests\\Infrastructure\\' . $base;
-    } else {
-        $class = 'Tests\\Domain\\' . $base;
+    $relative = substr($file, strlen(__DIR__ . '/'));
+    if (!is_string($relative) || !str_ends_with($relative, '.php')) {
+        throw new RuntimeException('Invalid test file path: ' . $file);
     }
+    $class = 'Tests\\' . str_replace('/', '\\', substr($relative, 0, -4));
 
     $instance = new $class();
     $methods = get_class_methods($instance);
