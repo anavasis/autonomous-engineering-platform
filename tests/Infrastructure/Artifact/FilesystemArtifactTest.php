@@ -175,8 +175,3 @@ final class FilesystemArtifactTest
         @rmdir($dir);
     }
 }
-
-function ArtifactManifestSchemaOk(mixed $version): bool
-{
-    return $version === 1;
-}
