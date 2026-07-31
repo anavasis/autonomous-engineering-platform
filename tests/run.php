@@ -50,6 +50,9 @@ $testFiles = [
     __DIR__ . '/Application/Agent/AgentCoordinatorTest.php',
     __DIR__ . '/Infrastructure/Agent/FilesystemAgentStoreTest.php',
     __DIR__ . '/Infrastructure/Agent/AgentAssignmentAdapterTest.php',
+    __DIR__ . '/Application/Optimization/OptimizationEngineTest.php',
+    __DIR__ . '/Infrastructure/Optimization/FilesystemOptimizationStoreTest.php',
+    __DIR__ . '/Infrastructure/Optimization/OptimizationAdaptersTest.php',
 ];
 
 $passed = 0;

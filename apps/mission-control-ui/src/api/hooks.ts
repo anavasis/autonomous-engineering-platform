@@ -614,3 +614,80 @@ export function useUpdateAgentSettings() {
   });
 }
 
+export function useOptimizationDashboard() {
+  return useQuery({
+    queryKey: ['optimization-dashboard'],
+    queryFn: () => api<Record<string, unknown>>('/optimization/dashboard'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useResources() {
+  return useQuery({
+    queryKey: ['resources'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/resources'),
+  });
+}
+
+export function useCapacity() {
+  return useQuery({
+    queryKey: ['capacity'],
+    queryFn: () => api<Record<string, unknown>>('/capacity'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useBudgets() {
+  return useQuery({
+    queryKey: ['budgets'],
+    queryFn: () => api<Record<string, unknown>>('/budgets'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useCosts() {
+  return useQuery({
+    queryKey: ['costs'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/costs'),
+    refetchInterval: 8000,
+  });
+}
+
+export function useCostForecast() {
+  return useQuery({
+    queryKey: ['cost-forecast'],
+    queryFn: () => api<Record<string, unknown>>('/costs/forecast'),
+    refetchInterval: 8000,
+  });
+}
+
+export function useProviderRanking() {
+  return useQuery({
+    queryKey: ['provider-ranking'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/optimization/providers/ranking'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useOptimizationTimeline() {
+  return useQuery({
+    queryKey: ['optimization-timeline'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/optimization/timeline'),
+    refetchInterval: 4000,
+  });
+}
+
+export function useOptimizationMetrics() {
+  return useQuery({
+    queryKey: ['optimization-metrics'],
+    queryFn: () => api<Record<string, unknown>>('/optimization/metrics'),
+  });
+}
+
+export function useOptimizationSettings() {
+  return useQuery({
+    queryKey: ['optimization-settings'],
+    queryFn: () => api<{ settings: Record<string, unknown> }>('/settings/optimization'),
+  });
+}
+

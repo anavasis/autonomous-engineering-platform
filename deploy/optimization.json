@@ -1,0 +1,29 @@
+{
+  "resources": [
+    {"id": "res_provider_slots", "type": "provider.slot", "scope": "global", "unit": "sessions", "limits": {"max": 16}},
+    {"id": "res_ai_credits", "type": "provider.tokens", "scope": "global", "unit": "tokens", "limits": {"daily": 5000000}},
+    {"id": "res_workspace_disk", "type": "workspace.disk", "scope": "global", "unit": "bytes", "limits": {"max": 5368709120}},
+    {"id": "res_workspace_count", "type": "workspace.count", "scope": "global", "unit": "workspaces", "limits": {"max": 32}},
+    {"id": "res_agent_concurrency", "type": "agent.concurrency", "scope": "global", "unit": "assignments", "limits": {"max": 24}}
+  ],
+  "providers": [
+    {"id": "local-agent", "maxSessions": 4, "successRate": 0.9, "avgLatencyMs": 800, "failureRate": 0.05, "confidence": 0.85},
+    {"id": "stub-cli", "maxSessions": 2, "successRate": 0.75, "avgLatencyMs": 1200, "failureRate": 0.15, "confidence": 0.7},
+    {"id": "legacy-local", "maxSessions": 8, "successRate": 0.95, "avgLatencyMs": 400, "failureRate": 0.02, "confidence": 0.9}
+  ],
+  "costModels": [
+    {"providerId": "local-agent", "fixedCost": 0.0, "perRequest": 0.005, "perToken": 0.000001, "perMinute": 0.01},
+    {"providerId": "stub-cli", "fixedCost": 0.01, "perRequest": 0.02, "perToken": 0.000003, "perMinute": 0.03},
+    {"providerId": "legacy-local", "fixedCost": 0.0, "perRequest": 0.001, "perToken": 0.0, "perMinute": 0.005}
+  ],
+  "agents": [
+    {"id": "agt_architect_default", "role": "architect", "maxConcurrency": 2, "costWeight": 1.1, "confidence": 0.8},
+    {"id": "agt_implementer_default", "role": "implementer", "maxConcurrency": 3, "costWeight": 1.0, "confidence": 0.75},
+    {"id": "agt_reviewer_default", "role": "reviewer", "maxConcurrency": 2, "costWeight": 0.9, "confidence": 0.85}
+  ],
+  "workspace": {
+    "maxConcurrent": 16,
+    "maxBytes": 524288000,
+    "maxSnapshots": 100
+  }
+}
