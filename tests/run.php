@@ -34,6 +34,9 @@ $testFiles = [
     __DIR__ . '/Application/MissionControl/MissionControlQueryTest.php',
     __DIR__ . '/Infrastructure/MissionControl/MissionControlKernelTest.php',
     __DIR__ . '/Presentation/MissionControl/HttpKernelSmokeTest.php',
+    __DIR__ . '/Application/MissionExecution/HeuristicUnderstandingTest.php',
+    __DIR__ . '/Application/MissionExecution/ClarificationEngineTest.php',
+    __DIR__ . '/Application/MissionExecution/AutonomousMissionServiceTest.php',
 ];
 
 $passed = 0;

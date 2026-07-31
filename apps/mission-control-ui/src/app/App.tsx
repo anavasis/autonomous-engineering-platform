@@ -7,6 +7,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { MissionsPage } from '@/pages/MissionsPage';
 import { MissionDetailsPage } from '@/pages/MissionDetailsPage';
+import { NewMissionPage } from '@/pages/NewMissionPage';
 import { TimelinePage } from '@/pages/TimelinePage';
 import { ArtifactsPage } from '@/pages/ArtifactsPage';
 import { ValidationPage } from '@/pages/ValidationPage';
@@ -33,6 +34,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="missions" element={<MissionsPage />} />
+              <Route path="missions/new" element={<NewMissionPage />} />
               <Route path="missions/:missionId" element={<MissionDetailsPage />} />
               <Route path="timeline" element={<TimelinePage />} />
               <Route path="artifacts" element={<ArtifactsPage />} />

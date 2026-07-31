@@ -152,6 +152,59 @@ final class HttpKernel
             return;
         }
 
+        if ($method === 'POST' && $path === '/missions/intake') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $text = (string) ($body['text'] ?? '');
+            if (trim($text) === '') {
+                throw new \InvalidArgumentException('text is required.');
+            }
+            $projectId = isset($body['projectId']) && is_string($body['projectId']) ? $body['projectId'] : null;
+            $clientRequestId = isset($body['clientRequestId']) && is_string($body['clientRequestId']) ? $body['clientRequestId'] : null;
+            JsonResponse::send($this->app->ame()->intake($user, $text, $projectId, $clientRequestId), 201);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/intake/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->ame()->getIntake($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Intake not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/missions/intake/([A-Za-z0-9_-]+)/clarify$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $answers = isset($body['answers']) && is_array($body['answers']) ? $body['answers'] : $body;
+            JsonResponse::send($this->app->ame()->clarify($user, $m[1], $answers));
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/intake/([A-Za-z0-9_-]+)/plan$#', $path, $m) === 1) {
+            JsonResponse::send($this->app->ame()->preview($m[1]));
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/missions/intake/([A-Za-z0-9_-]+)/start$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $confirmed = ($body['confirmed'] ?? false) === true;
+            JsonResponse::send($this->app->ame()->confirmAndLaunch($user, $m[1], $confirmed), 201);
+
+            return;
+        }
+
         if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
             $item = $this->app->missions()->get($m[1]);
             if ($item === null) {
@@ -190,6 +243,65 @@ final class HttpKernel
             $this->requireCsrf();
             $this->app->auth()->assertRole($user, Role::OPERATOR);
             JsonResponse::send($this->app->commands()->cancelRun($m[2]));
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/missions/([A-Za-z0-9_-]+)/runs/([A-Za-z0-9_-]+)/resume$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $attributes = isset($body['attributes']) && is_array($body['attributes']) ? $body['attributes'] : [];
+            JsonResponse::send($this->app->ame()->resume($m[2], $attributes));
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/missions/([A-Za-z0-9_-]+)/retry$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send($this->app->ame()->retry($user, $m[1]));
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/conversation$#', $path, $m) === 1) {
+            $item = $this->app->ame()->conversationForMission($m[1]);
+            JsonResponse::send(['conversation' => $item]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/plan$#', $path, $m) === 1) {
+            $item = $this->app->ame()->planForMission($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Execution plan not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/projects/([A-Za-z0-9_-]+)/memory$#', $path, $m) === 1) {
+            $item = $this->app->ame()->projectMemory($m[1]);
+            JsonResponse::send(['memory' => $item]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/projects/([A-Za-z0-9_-]+)/memory/capture$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $this->app->ame()->captureMemory(
+                $m[1],
+                (string) ($body['objective'] ?? ''),
+                ($body['succeeded'] ?? true) === true,
+                isset($body['constraints']) && is_array($body['constraints']) ? $body['constraints'] : []
+            );
+            JsonResponse::send(['ok' => true]);
 
             return;
         }
@@ -296,12 +408,13 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.1.0',
+                'version' => '0.2.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
                     'assignedAgent' => false,
                     'sse' => false,
+                    'autonomousMissionExecution' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
