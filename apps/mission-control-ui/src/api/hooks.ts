@@ -121,6 +121,59 @@ export function useSettings() {
   });
 }
 
+export function useExecutionProviders() {
+  return useQuery({
+    queryKey: ['execution-providers'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/execution/providers'),
+    refetchInterval: 10000,
+  });
+}
+
+export function useMissionExecution(missionId: string) {
+  return useQuery({
+    queryKey: ['mission-execution', missionId],
+    queryFn: () => api<{ session: Record<string, unknown> | null }>(`/missions/${missionId}/execution`),
+    enabled: Boolean(missionId),
+    refetchInterval: 3000,
+  });
+}
+
+export function useExecutionEvents(sessionId: string) {
+  return useQuery({
+    queryKey: ['execution-events', sessionId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/execution/sessions/${sessionId}/events`),
+    enabled: Boolean(sessionId),
+    refetchInterval: 2500,
+  });
+}
+
+export function useExecutionPrompt(sessionId: string) {
+  return useQuery({
+    queryKey: ['execution-prompt', sessionId],
+    queryFn: () => api<Record<string, unknown>>(`/execution/sessions/${sessionId}/prompt`),
+    enabled: Boolean(sessionId),
+  });
+}
+
+export function useExecutionMetrics(sessionId: string) {
+  return useQuery({
+    queryKey: ['execution-metrics', sessionId],
+    queryFn: () => api<Record<string, unknown>>(`/execution/sessions/${sessionId}/metrics`),
+    enabled: Boolean(sessionId),
+    refetchInterval: 3000,
+  });
+}
+
+export function useExecutionSettings() {
+  return useQuery({
+    queryKey: ['execution-settings'],
+    queryFn: () =>
+      api<{ settings: Record<string, unknown>; providers: Array<Record<string, unknown>> }>(
+        '/settings/execution',
+      ),
+  });
+}
+
 export function useApprovalDecision() {
   const qc = useQueryClient();
   return useMutation({

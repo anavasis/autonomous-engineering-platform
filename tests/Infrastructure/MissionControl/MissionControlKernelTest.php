@@ -17,10 +17,10 @@ final class MissionControlKernelTest
         putenv('AEP_BOOTSTRAP_ADMIN_DISPLAY=Kernel Admin');
 
         try {
-            $kernel = new MissionControlKernel($root, '0.2.0');
+            $kernel = new MissionControlKernel($root, '0.3.0');
             $health = $kernel->health()->probe();
             Assert::same('ok', $health['status']);
-            Assert::same('0.2.0', $health['version']);
+            Assert::same('0.3.0', $health['version']);
 
             $login = $kernel->auth()->login('admin', 'kernel-secret', '2026-07-31T03:00:00Z');
             Assert::same('admin', $login['user']->username());

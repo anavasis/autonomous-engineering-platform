@@ -55,7 +55,7 @@ export function AppShell() {
           ))}
         </nav>
         <div className="aep-sidebar-foot">
-          v0.2.0 · aep.anavasis.tech
+          v0.3.0 · aep.anavasis.tech
         </div>
       </aside>
 

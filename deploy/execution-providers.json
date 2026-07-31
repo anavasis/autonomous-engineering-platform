@@ -1,0 +1,87 @@
+{
+  "providers": [
+    {
+      "id": "local-agent",
+      "type": "local-agent",
+      "enabled": true,
+      "displayName": "Local Agent"
+    },
+    {
+      "id": "cursor",
+      "type": "stub-cli",
+      "enabled": true,
+      "displayName": "Cursor Agent",
+      "options": {
+        "simulate": true,
+        "binary": "",
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
+          "tools": true,
+          "maxContextTokens": 200000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "codex",
+      "type": "stub-cli",
+      "enabled": true,
+      "displayName": "OpenAI Codex",
+      "options": {
+        "simulate": true,
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": false,
+          "tools": true,
+          "maxContextTokens": 128000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "claude-code",
+      "type": "stub-cli",
+      "enabled": true,
+      "displayName": "Claude Code",
+      "options": {
+        "simulate": true,
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "tools": true,
+          "maxContextTokens": 200000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "gemini-cli",
+      "type": "stub-cli",
+      "enabled": true,
+      "displayName": "Gemini CLI",
+      "options": {
+        "simulate": true,
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": false,
+          "tools": true,
+          "maxContextTokens": 1000000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "legacy-local",
+      "type": "legacy-local",
+      "enabled": true,
+      "displayName": "Legacy Local Executor"
+    }
+  ]
+}

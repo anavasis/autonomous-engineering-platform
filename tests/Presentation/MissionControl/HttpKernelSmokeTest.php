@@ -20,7 +20,7 @@ final class HttpKernelSmokeTest
         $root = sys_get_temp_dir() . '/aep_mc_http_' . bin2hex(random_bytes(4));
         putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD=http-secret');
 
-        $kernel = new MissionControlKernel($root, '0.2.0');
+        $kernel = new MissionControlKernel($root, '0.3.0');
         $http = new HttpKernel($kernel);
 
         $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -35,7 +35,7 @@ final class HttpKernelSmokeTest
         $data = json_decode($raw, true);
         Assert::true(is_array($data));
         Assert::same('ok', $data['status'] ?? null);
-        Assert::same('0.2.0', $data['version'] ?? null);
+        Assert::same('0.3.0', $data['version'] ?? null);
 
         $this->removeDir($root);
         putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD');
@@ -46,7 +46,7 @@ final class HttpKernelSmokeTest
         require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';
 
         $root = sys_get_temp_dir() . '/aep_mc_http_' . bin2hex(random_bytes(4));
-        $kernel = new MissionControlKernel($root, '0.2.0');
+        $kernel = new MissionControlKernel($root, '0.3.0');
         $http = new HttpKernel($kernel);
 
         $_SERVER['REQUEST_METHOD'] = 'GET';
