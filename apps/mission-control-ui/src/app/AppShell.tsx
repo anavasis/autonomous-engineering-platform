@@ -13,6 +13,7 @@ const NAV = [
   { to: '/artifacts', label: 'Artifacts' },
   { to: '/workspaces', label: 'Workspaces' },
   { to: '/patches', label: 'Patches' },
+  { to: '/knowledge', label: 'Knowledge' },
   { to: '/validation', label: 'Validation' },
   { to: '/approvals', label: 'Approvals' },
   { to: '/settings', label: 'Settings' },
@@ -57,7 +58,7 @@ export function AppShell() {
           ))}
         </nav>
         <div className="aep-sidebar-foot">
-          v0.5.0 · aep.anavasis.tech
+          v0.6.0 · aep.anavasis.tech
         </div>
       </aside>
 

@@ -1,0 +1,20 @@
+{
+  "default": "local_lexical",
+  "providers": [
+    {
+      "id": "local_lexical",
+      "type": "local_lexical",
+      "enabled": true,
+      "displayName": "Local Lexical Embedding",
+      "options": {
+        "dimensions": 64
+      }
+    },
+    {
+      "id": "stub_embed",
+      "type": "stub_embed",
+      "enabled": true,
+      "displayName": "Stub Embedding"
+    }
+  ]
+}

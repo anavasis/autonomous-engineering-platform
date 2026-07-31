@@ -12,6 +12,7 @@ import {
   useMissionExecution,
   useMissionWorkspace,
   usePatches,
+  useMissionMemory,
   useTimeline,
   useValidation,
 } from '@/api/hooks';
@@ -34,6 +35,7 @@ const TABS = [
   'execution',
   'workspace',
   'patches',
+  'memory',
   'artifacts',
   'logs',
   'validation',
@@ -66,6 +68,7 @@ export function MissionDetailsPage() {
   const execMetrics = useExecutionMetrics(sessionId);
   const missionWorkspace = useMissionWorkspace(missionId);
   const missionPatches = usePatches(missionId);
+  const missionMemory = useMissionMemory(missionId);
   const [tab, setTab] = useState<(typeof TABS)[number]>('summary');
   const [selectedEvent, setSelectedEvent] = useState<Record<string, unknown> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -332,6 +335,28 @@ export function MissionDetailsPage() {
           </div>
         ) : (
           <EmptyState title="No patches" description="Patches appear after provider-backed execution creates a reviewable change set." />
+        )
+      )}
+
+      {tab === 'memory' && (
+        (missionMemory.data?.items ?? []).length ? (
+          <div className="aep-table-wrap">
+            <table className="aep-table">
+              <thead><tr><th>Knowledge</th><th>Kind</th><th>Status</th><th>Summary</th></tr></thead>
+              <tbody>
+                {(missionMemory.data?.items ?? []).map((k) => (
+                  <tr key={String(k.knowledgeId)}>
+                    <td><Link to="/knowledge" className="aep-mono">{String(k.knowledgeId)}</Link></td>
+                    <td>{String(k.kind)}</td>
+                    <td><Status label={String(k.status)} tone={statusTone(String(k.status))} /></td>
+                    <td>{String(k.summary)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No mission memory" description="Knowledge records are captured from executions, patches, and workspace seals." />
         )
       )}
 

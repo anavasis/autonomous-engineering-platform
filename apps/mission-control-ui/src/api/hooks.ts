@@ -302,6 +302,71 @@ export function useReviewQueue() {
   });
 }
 
+export function useKnowledge(projectId?: string) {
+  const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+  return useQuery({
+    queryKey: ['knowledge', projectId ?? ''],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/knowledge${qs}`),
+    refetchInterval: 5000,
+  });
+}
+
+export function useKnowledgeDetail(knowledgeId: string) {
+  return useQuery({
+    queryKey: ['knowledge-detail', knowledgeId],
+    queryFn: () => api<Record<string, unknown>>(`/knowledge/${knowledgeId}`),
+    enabled: Boolean(knowledgeId),
+  });
+}
+
+export function useKnowledgeLessons(projectId?: string) {
+  const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+  return useQuery({
+    queryKey: ['knowledge-lessons', projectId ?? ''],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/knowledge/lessons${qs}`),
+    refetchInterval: 6000,
+  });
+}
+
+export function useKnowledgeTimeline() {
+  return useQuery({
+    queryKey: ['knowledge-timeline'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/knowledge/timeline'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useSimilarMissions(objective: string, projectId?: string) {
+  const params = new URLSearchParams({ objective });
+  if (projectId) params.set('projectId', projectId);
+  return useQuery({
+    queryKey: ['similar-missions', objective, projectId ?? ''],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/knowledge/similar/missions?${params}`),
+    enabled: objective.trim().length >= 4,
+    refetchInterval: 8000,
+  });
+}
+
+export function useSimilarPatches(objective: string, projectId?: string) {
+  const params = new URLSearchParams({ objective });
+  if (projectId) params.set('projectId', projectId);
+  return useQuery({
+    queryKey: ['similar-patches', objective, projectId ?? ''],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/knowledge/similar/patches?${params}`),
+    enabled: objective.trim().length >= 4,
+    refetchInterval: 8000,
+  });
+}
+
+export function useMissionMemory(missionId: string) {
+  return useQuery({
+    queryKey: ['mission-memory', missionId],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/missions/${missionId}/memory`),
+    enabled: Boolean(missionId),
+    refetchInterval: 5000,
+  });
+}
+
 export function useApprovalDecision() {
   const qc = useQueryClient();
   return useMutation({

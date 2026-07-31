@@ -15,6 +15,7 @@ import { ApprovalsPage } from '@/pages/ApprovalsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { WorkspacesPage } from '@/pages/WorkspacesPage';
 import { PatchesPage } from '@/pages/PatchesPage';
+import { KnowledgePage } from '@/pages/KnowledgePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ export function App() {
               <Route path="artifacts" element={<ArtifactsPage />} />
               <Route path="workspaces" element={<WorkspacesPage />} />
               <Route path="patches" element={<PatchesPage />} />
+              <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="validation" element={<ValidationPage />} />
               <Route path="approvals" element={<ApprovalsPage />} />
               <Route path="settings" element={<SettingsPage />} />
