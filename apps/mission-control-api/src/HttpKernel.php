@@ -408,16 +408,131 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.2.0',
+                'version' => '0.3.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
                     'assignedAgent' => false,
                     'sse' => false,
                     'autonomousMissionExecution' => true,
+                    'engineeringExecutionProviders' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
+                'execution' => $this->app->execution()->settings(),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/execution') {
+            JsonResponse::send([
+                'settings' => $this->app->execution()->settings(),
+                'providers' => $this->app->execution()->listProviders(),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/execution') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            JsonResponse::send([
+                'settings' => $this->app->execution()->updateSettings($body),
+            ]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/execution/providers') {
+            JsonResponse::send(['items' => $this->app->execution()->listProviders()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/execution/providers/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->execution()->getProvider($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Provider not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/missions/([A-Za-z0-9_-]+)/execution$#', $path, $m) === 1) {
+            $session = $this->app->execution()->sessionForMission($m[1]);
+            JsonResponse::send(['session' => $session]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $session = $this->app->execution()->session($m[1]);
+            if ($session === null) {
+                JsonResponse::problem('Not Found', 404, 'Execution session not found.');
+
+                return;
+            }
+            JsonResponse::send($session);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/events$#', $path, $m) === 1) {
+            $after = isset($_GET['afterSeq']) ? (int) $_GET['afterSeq'] : 0;
+            JsonResponse::send(['items' => $this->app->execution()->events($m[1], $after)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/prompt$#', $path, $m) === 1) {
+            $item = $this->app->execution()->promptPreview($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Execution session not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/metrics$#', $path, $m) === 1) {
+            $item = $this->app->execution()->metrics($m[1]);
+            if ($item === null) {
+                JsonResponse::problem('Not Found', 404, 'Execution session not found.');
+
+                return;
+            }
+            JsonResponse::send($item);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/cancel$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $reason = is_string($body['reason'] ?? null) ? (string) $body['reason'] : 'Cancelled by operator.';
+            $this->app->executionOrchestrator()->cancel($m[1], $reason);
+            JsonResponse::send(['ok' => true, 'sessionId' => $m[1]]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/resume$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $result = $this->app->executionOrchestrator()->resume($m[1]);
+            JsonResponse::send([
+                'ok' => true,
+                'status' => $result->status(),
+                'message' => $result->message(),
+                'context' => $result->context(),
             ]);
 
             return;

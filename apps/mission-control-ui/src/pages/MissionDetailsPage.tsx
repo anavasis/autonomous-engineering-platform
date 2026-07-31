@@ -2,7 +2,17 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { useArtifacts, useMission, useTimeline, useValidation } from '@/api/hooks';
+import {
+  useArtifacts,
+  useExecutionEvents,
+  useExecutionMetrics,
+  useExecutionPrompt,
+  useExecutionProviders,
+  useMission,
+  useMissionExecution,
+  useTimeline,
+  useValidation,
+} from '@/api/hooks';
 import {
   Button,
   Drawer,
@@ -19,6 +29,7 @@ const TABS = [
   'plan',
   'conversation',
   'timeline',
+  'execution',
   'artifacts',
   'logs',
   'validation',
@@ -43,10 +54,17 @@ export function MissionDetailsPage() {
     queryFn: () => api<{ conversation: Record<string, unknown> | null }>(`/missions/${missionId}/conversation`),
     enabled: Boolean(missionId),
   });
+  const providers = useExecutionProviders();
+  const missionExecution = useMissionExecution(missionId);
+  const sessionId = String(missionExecution.data?.session?.sessionId ?? '');
+  const execEvents = useExecutionEvents(sessionId);
+  const execPrompt = useExecutionPrompt(sessionId);
+  const execMetrics = useExecutionMetrics(sessionId);
   const [tab, setTab] = useState<(typeof TABS)[number]>('summary');
   const [selectedEvent, setSelectedEvent] = useState<Record<string, unknown> | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [providerId, setProviderId] = useState('');
 
   const validationRow = useMemo(
     () => (validation.data?.items ?? []).find((v) => v.missionId === missionId),
@@ -90,6 +108,40 @@ export function MissionDetailsPage() {
       setToast('Resumed: ' + String(result.engineState));
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Resume failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelExecution() {
+    if (!sessionId) return;
+    setBusy(true);
+    try {
+      await api(`/execution/sessions/${sessionId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'Cancelled from Mission Control' }),
+      });
+      setToast('Execution cancel requested');
+      await missionExecution.refetch();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Cancel failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resumeExecution() {
+    if (!sessionId) return;
+    setBusy(true);
+    try {
+      const result = await api<Record<string, unknown>>(`/execution/sessions/${sessionId}/resume`, {
+        method: 'POST',
+        body: '{}',
+      });
+      setToast('Provider resume: ' + String(result.status));
+      await missionExecution.refetch();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Provider resume failed');
     } finally {
       setBusy(false);
     }
@@ -140,9 +192,100 @@ export function MissionDetailsPage() {
               <tr><td>Project</td><td>{m.projectId ? String(m.projectId) : '—'}</td></tr>
               <tr><td>Created</td><td className="aep-mono">{String(m.createdAtUtc)}</td></tr>
               <tr><td>Assigned agent</td><td>Unassigned (future)</td></tr>
+              <tr><td>Execution provider</td><td className="aep-mono">{missionExecution.data?.session ? String(missionExecution.data.session.providerId) : 'legacy / none'}</td></tr>
               <tr><td>Validation</td><td>{m.validation ? JSON.stringify(m.validation) : '—'}</td></tr>
             </tbody>
           </table>
+        </div>
+      )}
+
+      {tab === 'execution' && (
+        <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'end' }}>
+            <label style={{ display: 'grid', gap: '0.35rem', minWidth: 220 }}>
+              <span>Execution provider</span>
+              <select
+                className="aep-input"
+                value={providerId || String(missionExecution.data?.session?.providerId ?? '')}
+                onChange={(e) => setProviderId(e.target.value)}
+              >
+                <option value="">Legacy (no provider)</option>
+                {(providers.data?.items ?? []).map((p) => (
+                  <option key={String(p.id)} value={String(p.id)}>
+                    {String(p.displayName)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button variant="ghost" disabled={busy || !sessionId} onClick={() => void cancelExecution()}>Cancel execution</Button>
+            <Button variant="ghost" disabled={busy || !sessionId} onClick={() => void resumeExecution()}>Resume provider</Button>
+          </div>
+
+          {missionExecution.data?.session ? (
+            <>
+              <div className="aep-table-wrap">
+                <table className="aep-table" style={{ minWidth: 0 }}>
+                  <tbody>
+                    <tr><td>Session</td><td className="aep-mono">{String(missionExecution.data.session.sessionId)}</td></tr>
+                    <tr><td>Status</td><td><Status label={String(missionExecution.data.session.status)} tone={statusTone(String(missionExecution.data.session.status))} /></td></tr>
+                    <tr><td>Provider</td><td className="aep-mono">{String(missionExecution.data.session.providerId)}</td></tr>
+                    <tr><td>Message</td><td>{String(missionExecution.data.session.message ?? '')}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <h3>Provider timeline</h3>
+                {(execEvents.data?.items ?? []).length === 0 ? (
+                  <EmptyState title="No provider events" description="Events appear while a provider session runs." />
+                ) : (
+                  <div className="aep-timeline">
+                    {(execEvents.data?.items ?? []).map((e) => (
+                      <div key={String(e.seq)} className="aep-timeline-item">
+                        <div className="aep-mono" style={{ color: 'var(--aep-ink-faint)' }}>
+                          #{String(e.seq)} · {String(e.atUtc)} · {String(e.type)}
+                        </div>
+                        <div>{String(e.message)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3>Prompt preview</h3>
+                {execPrompt.data?.preview ? (
+                  <pre className="aep-mono" style={{ whiteSpace: 'pre-wrap', background: 'rgba(0,0,0,0.25)', padding: '1rem', borderRadius: 12 }}>
+                    {String(execPrompt.data.preview)}
+                  </pre>
+                ) : (
+                  <EmptyState title="No prompt" description="Prompt bundles are captured when a provider session starts." />
+                )}
+              </div>
+
+              <div>
+                <h3>Execution metrics</h3>
+                {execMetrics.data?.usage ? (
+                  <div className="aep-table-wrap">
+                    <table className="aep-table" style={{ minWidth: 0 }}>
+                      <tbody>
+                        {Object.entries(execMetrics.data.usage as Record<string, unknown>).map(([k, v]) => (
+                          <tr key={k}><td>{k}</td><td className="aep-mono">{String(v)}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState title="No metrics" description="Token and cost accounting appear after provider completion." />
+                )}
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              title="No provider session"
+              description="Provider sessions appear when a mission run executes with a selected engineering execution provider. Configure a default provider in Settings, or pass providerId in run attributes."
+            />
+          )}
         </div>
       )}
 
@@ -246,10 +389,23 @@ export function MissionDetailsPage() {
       )}
 
       {tab === 'logs' && (
-        <EmptyState
-          title="Logs via Artifact API"
-          description="Open Artifacts and select kind=log items. Content is streamed only through Mission Control API."
-        />
+        (execEvents.data?.items ?? []).length ? (
+          <div className="aep-timeline">
+            {(execEvents.data?.items ?? []).map((e) => (
+              <div key={`log-${String(e.seq)}`} className="aep-timeline-item">
+                <div className="aep-mono" style={{ color: 'var(--aep-ink-faint)' }}>
+                  {String(e.atUtc)} · {String(e.type)}
+                </div>
+                <div>{String(e.message)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="Provider logs"
+            description="Provider log events appear here during engineering execution. Artifact log files remain available under Artifacts."
+          />
+        )
       )}
 
       {tab === 'validation' && (

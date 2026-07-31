@@ -5,6 +5,14 @@ declare(strict_types=1);
 namespace Aep\Infrastructure\MissionControl;
 
 use Aep\Application\Artifact\ArtifactService;
+use Aep\Application\EngineeringExecution\Service\ArtifactCapture;
+use Aep\Application\EngineeringExecution\Service\ContextPackager;
+use Aep\Application\EngineeringExecution\Service\DiffCollector;
+use Aep\Application\EngineeringExecution\Service\EngineeringExecutionOrchestrator;
+use Aep\Application\EngineeringExecution\Service\EngineeringExecutionQueryService;
+use Aep\Application\EngineeringExecution\Service\PromptPipeline;
+use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
+use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
 use Aep\Application\Execution\ExecutionService;
 use Aep\Application\Mission\MissionCommandService;
 use Aep\Application\MissionControl\Auth\AuthService;
@@ -32,7 +40,14 @@ use Aep\Application\Project\ProjectCommandService;
 use Aep\Application\Validation\ValidationPipeline;
 use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
 use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
+use Aep\Infrastructure\EngineeringExecution\Bridge\LegacyExecutorBridgeProvider;
+use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
+use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
+use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
+use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSessionStore;
+use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSettingsStore;
 use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
+use Aep\Infrastructure\Execution\ProviderRoutingExecutor;
 use Aep\Infrastructure\MissionControl\Auth\FileSessionStore;
 use Aep\Infrastructure\MissionControl\Auth\JsonUserStore;
 use Aep\Infrastructure\MissionControl\Catalog\JsonMissionCatalog;
@@ -63,9 +78,11 @@ final class MissionControlKernel
     private MissionControlCommandFacade $commands;
     private HealthService $health;
     private AutonomousMissionService $ame;
+    private EngineeringExecutionQueryService $executionQuery;
+    private EngineeringExecutionOrchestrator $executionOrchestrator;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.2.0')
+    public function __construct(string $dataRoot, string $version = '0.3.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -79,8 +96,9 @@ final class MissionControlKernel
         $authDir = $this->dataRoot . '/auth';
         $sessionsDir = $authDir . '/sessions';
         $ameDir = $this->dataRoot . '/ame';
+        $executionDir = $this->dataRoot . '/execution';
 
-        foreach ([$missionsDir, $projectsDir, $runsDir, $artifactsDir, $authDir, $sessionsDir, $ameDir] as $dir) {
+        foreach ([$missionsDir, $projectsDir, $runsDir, $artifactsDir, $authDir, $sessionsDir, $ameDir, $executionDir] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
             }
@@ -100,7 +118,32 @@ final class MissionControlKernel
 
         $missionCommands = new MissionCommandService($missionRepo);
         $projectCommands = new ProjectCommandService($projectRepo);
-        $execution = new ExecutionService(new DeclarativeLocalExecutor());
+
+        $legacyLocal = new DeclarativeLocalExecutor();
+        $sessionStore = new JsonExecutionSessionStore($executionDir);
+        $settingsStore = new JsonExecutionSettingsStore($executionDir);
+        $providerConfig = $this->loadProviderConfig();
+        $registry = new ConfigProviderRegistry($providerConfig, [
+            'local-agent' => static fn (array $options): LocalAgentProvider => new LocalAgentProvider($options),
+            'stub-cli' => static fn (array $options): StubCliProvider => new StubCliProvider($options),
+            'legacy-local' => static fn (array $options): LegacyExecutorBridgeProvider => new LegacyExecutorBridgeProvider($legacyLocal, $options),
+        ]);
+
+        $this->executionOrchestrator = new EngineeringExecutionOrchestrator(
+            $registry,
+            $sessionStore,
+            new PromptPipeline(),
+            new ContextPackager(),
+            new WorkspacePreparer($executionDir),
+            new DiffCollector(),
+            new ArtifactCapture($artifactService),
+            new ResultNormalizer(),
+        );
+        $this->executionQuery = new EngineeringExecutionQueryService($registry, $sessionStore, $settingsStore);
+
+        $execution = new ExecutionService(
+            new ProviderRoutingExecutor($legacyLocal, $this->executionOrchestrator, $settingsStore)
+        );
         $validationPipeline = new ValidationPipeline([new DeclarativeContextValidationStep()]);
         $engine = new MissionEngine(
             $missionCommands,
@@ -218,9 +261,46 @@ final class MissionControlKernel
         return $this->ame;
     }
 
+    public function execution(): EngineeringExecutionQueryService
+    {
+        return $this->executionQuery;
+    }
+
+    public function executionOrchestrator(): EngineeringExecutionOrchestrator
+    {
+        return $this->executionOrchestrator;
+    }
+
     public function dataRoot(): string
     {
         return $this->dataRoot;
+    }
+
+    /** @return array<string, mixed> */
+    private function loadProviderConfig(): array
+    {
+        $configured = getenv('AEP_EXECUTION_PROVIDERS_CONFIG');
+        $path = is_string($configured) && $configured !== ''
+            ? $configured
+            : dirname(__DIR__, 3) . '/deploy/execution-providers.json';
+        if (!is_file($path)) {
+            return [
+                'providers' => [
+                    [
+                        'id' => 'local-agent',
+                        'type' => 'local-agent',
+                        'enabled' => true,
+                        'displayName' => 'Local Agent',
+                    ],
+                ],
+            ];
+        }
+        $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($data)) {
+            throw new \RuntimeException('Invalid execution providers config.');
+        }
+
+        return $data;
     }
 
     private function bootstrapAdmin(): void
