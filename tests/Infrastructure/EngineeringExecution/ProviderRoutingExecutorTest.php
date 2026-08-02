@@ -13,6 +13,7 @@ use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
 use Aep\Application\Execution\ExecutionRequest;
 use Aep\Application\Execution\ExecutionService;
 use Aep\Infrastructure\EngineeringExecution\Provider\CursorCliProvider;
+use Aep\Infrastructure\EngineeringExecution\Provider\ExternalCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
@@ -83,9 +84,20 @@ final class ProviderRoutingExecutorTest
             Assert::true($registry->has('gemini-cli'));
             Assert::same('Cursor Agent', $registry->get('cursor')->displayName());
             Assert::true($registry->get('cursor') instanceof CursorCliProvider);
+            Assert::true($registry->get('cursor') instanceof ExternalCliProvider);
             $health = $registry->get('cursor')->health();
             Assert::true($health->isAvailable());
             Assert::same('degraded', $registry->get('codex')->health()->status());
+
+            $ext = new ConfigProviderRegistry([
+                'providers' => [
+                    ['id' => 'future_cli', 'type' => 'external-cli', 'enabled' => true, 'displayName' => 'Future', 'options' => ['binary' => $bin]],
+                ],
+            ], [
+                'external-cli' => static fn (array $o): ExternalCliProvider => new ExternalCliProvider($o),
+            ]);
+            Assert::true($ext->has('future_cli'));
+            Assert::same('ok', $ext->get('future_cli')->health()->status());
         } finally {
             $this->removeDir($root);
         }
@@ -122,6 +134,14 @@ final class ProviderRoutingExecutorTest
         $suite->test_run_captures_streams_and_leaves_workspace_for_diffcollector();
         $suite->test_nonzero_exit_fails_without_mutating_provider_side_files();
         $suite->test_uses_repo_subdirectory_when_configured_and_present();
+    }
+
+    public function test_external_cli_provider_extract_suite(): void
+    {
+        require_once __DIR__ . '/ExternalCliProviderTest.php';
+        $suite = new ExternalCliProviderTest();
+        $suite->test_generic_external_cli_run_and_events();
+        $suite->test_cursor_provider_is_thin_external_subclass();
     }
 
     private function router(string $root, ?JsonExecutionSettingsStore $settings = null): ProviderRoutingExecutor

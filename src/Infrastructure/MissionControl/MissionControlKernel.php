@@ -115,6 +115,7 @@ use Aep\Infrastructure\CodeReview\Store\FilesystemPatchStore;
 use Aep\Infrastructure\CodeReview\Store\JsonPatchSettingsStore;
 use Aep\Infrastructure\EngineeringExecution\Bridge\LegacyExecutorBridgeProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\CursorCliProvider;
+use Aep\Infrastructure\EngineeringExecution\Provider\ExternalCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
@@ -181,7 +182,7 @@ final class MissionControlKernel
     private GovernanceObserveAdapter $governanceObserve;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '1.1.0')
+    public function __construct(string $dataRoot, string $version = '1.2.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -251,6 +252,7 @@ final class MissionControlKernel
             'local-agent' => static fn (array $options): LocalAgentProvider => new LocalAgentProvider($options),
             'stub-cli' => static fn (array $options): StubCliProvider => new StubCliProvider($options),
             'cursor-cli' => static fn (array $options): CursorCliProvider => new CursorCliProvider($options),
+            'external-cli' => static fn (array $options): ExternalCliProvider => new ExternalCliProvider($options),
             'legacy-local' => static fn (array $options): LegacyExecutorBridgeProvider => new LegacyExecutorBridgeProvider($legacyLocal, $options),
         ]);
 
