@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Aep\Application\MissionControl\Command;
 
+use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
+use Aep\Application\ExecutionRuntime\Service\RuntimeCancellation;
 use Aep\Application\Mission\Command\ApprovalCommand;
 use Aep\Application\Mission\Command\CreateMission;
 use Aep\Application\Mission\MissionCommandService;
@@ -16,6 +19,7 @@ use Aep\Application\Project\ProjectCommandService;
 
 /**
  * Thin command façade — delegates to existing Application services only.
+ * Mission start/resume/cancel go through Execution Runtime when wired.
  */
 final class MissionControlCommandFacade
 {
@@ -23,6 +27,8 @@ final class MissionControlCommandFacade
         private readonly MissionCommandService $missions,
         private readonly ProjectCommandService $projects,
         private readonly MissionEngine $engine,
+        private readonly ?JobDispatcher $runtime = null,
+        private readonly ?RuntimeCancellation $runtimeCancel = null,
     ) {
     }
 
@@ -120,18 +126,39 @@ final class MissionControlCommandFacade
     public function decideGate(User $actor, string $runId, string $gateId, bool $approve): array
     {
         $key = 'gate.' . $gateId;
-        $result = $this->engine->resume($runId, [
+        $attributes = [
             $key => $approve ? 'approved' : 'rejected',
             'decidedBy' => $actor->id(),
-        ], Utc::now());
+        ];
+
+        if ($this->runtime === null) {
+            $result = $this->engine->resume($runId, $attributes, Utc::now());
+
+            return [
+                'runId' => $result->runId(),
+                'missionId' => $result->missionId(),
+                'engineState' => $result->engineState()->toString(),
+                'message' => $result->message(),
+                'gateId' => $gateId,
+                'decision' => $approve ? 'approved' : 'rejected',
+            ];
+        }
+
+        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
+            'action' => 'resume',
+            'runId' => $runId,
+            'attributes' => $attributes,
+            'occurredAtUtc' => Utc::now(),
+        ]);
 
         return [
-            'runId' => $result->runId(),
-            'missionId' => $result->missionId(),
-            'engineState' => $result->engineState()->toString(),
-            'message' => $result->message(),
+            'runId' => $runId,
+            'missionId' => '',
+            'engineState' => 'planned',
+            'message' => 'Mission resume enqueued.',
             'gateId' => $gateId,
             'decision' => $approve ? 'approved' : 'rejected',
+            'jobId' => $job->id(),
         ];
     }
 
@@ -146,22 +173,44 @@ final class MissionControlCommandFacade
         ?string $projectId = null,
         array $attributes = [],
     ): array {
-        $result = $this->engine->start(new MissionEngineRequest(
-            $runId,
-            $missionId,
-            Utc::now(),
-            'user',
-            $actor->id(),
-            $attributes,
-            $projectId
-        ));
+        if ($this->runtime === null) {
+            $result = $this->engine->start(new MissionEngineRequest(
+                $runId,
+                $missionId,
+                Utc::now(),
+                'user',
+                $actor->id(),
+                $attributes,
+                $projectId
+            ));
+
+            return [
+                'runId' => $result->runId(),
+                'missionId' => $result->missionId(),
+                'engineState' => $result->engineState()->toString(),
+                'message' => $result->message(),
+                'progressPercent' => $result->progressPercent(),
+            ];
+        }
+
+        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
+            'action' => 'start',
+            'runId' => $runId,
+            'missionId' => $missionId,
+            'actorType' => 'user',
+            'actorId' => $actor->id(),
+            'projectId' => $projectId,
+            'attributes' => $attributes,
+            'occurredAtUtc' => Utc::now(),
+        ]);
 
         return [
-            'runId' => $result->runId(),
-            'missionId' => $result->missionId(),
-            'engineState' => $result->engineState()->toString(),
-            'message' => $result->message(),
-            'progressPercent' => $result->progressPercent(),
+            'runId' => $runId,
+            'missionId' => $missionId,
+            'engineState' => 'planned',
+            'message' => 'Mission execution enqueued.',
+            'progressPercent' => 0.0,
+            'jobId' => $job->id(),
         ];
     }
 
@@ -170,6 +219,10 @@ final class MissionControlCommandFacade
      */
     public function cancelRun(string $runId, string $reason = 'Cancelled from Mission Control.'): array
     {
+        if ($this->runtimeCancel !== null) {
+            return $this->runtimeCancel->cancelRun($runId, $reason);
+        }
+
         $result = $this->engine->cancel($runId, $reason, Utc::now());
 
         return [

@@ -37,6 +37,8 @@ $testFiles = [
     __DIR__ . '/Application/MissionExecution/HeuristicUnderstandingTest.php',
     __DIR__ . '/Application/MissionExecution/ClarificationEngineTest.php',
     __DIR__ . '/Application/MissionExecution/AutonomousMissionServiceTest.php',
+    __DIR__ . '/Application/ExecutionRuntime/MissionExecutionRuntimeTest.php',
+    __DIR__ . '/Infrastructure/ExecutionRuntime/FilesystemJobQueueTest.php',
     __DIR__ . '/Application/EngineeringExecution/EngineeringExecutionOrchestratorTest.php',
     __DIR__ . '/Infrastructure/EngineeringExecution/ProviderRoutingExecutorTest.php',
     __DIR__ . '/Application/EngineeringWorkspace/EngineeringWorkspaceServiceTest.php',

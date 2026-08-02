@@ -48,6 +48,11 @@ use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
 use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
 use Aep\Application\EngineeringWorkspace\Service\EngineeringWorkspaceService;
 use Aep\Application\EngineeringWorkspace\Service\WorkspaceQueryService;
+use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
+use Aep\Application\ExecutionRuntime\Service\RuntimeCancellation;
+use Aep\Application\ExecutionRuntime\Service\RuntimeWorker;
+use Aep\Infrastructure\ExecutionRuntime\FilesystemJobQueue;
 use Aep\Application\Execution\ExecutionService;
 use Aep\Application\Knowledge\Policy\KnowledgeRetrievalPolicyFactory;
 use Aep\Application\Knowledge\Service\ArchivePolicy;
@@ -185,9 +190,11 @@ final class MissionControlKernel
     private OptimizationQueryService $optimizationQuery;
     private GovernanceQueryService $governanceQuery;
     private GovernanceObserveAdapter $governanceObserve;
+    private JobDispatcher $jobDispatcher;
+    private RuntimeWorker $runtimeWorker;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '1.6.0')
+    public function __construct(string $dataRoot, string $version = '1.7.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -210,6 +217,7 @@ final class MissionControlKernel
         $agentsDir = $this->dataRoot . '/agents';
         $optimizationDir = $this->dataRoot . '/optimization';
         $governanceDir = $this->dataRoot . '/governance';
+        $runtimeDir = $this->dataRoot . '/runtime';
 
         foreach ([
             $missionsDir,
@@ -228,6 +236,7 @@ final class MissionControlKernel
             $agentsDir,
             $optimizationDir,
             $governanceDir,
+            $runtimeDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -450,6 +459,27 @@ final class MissionControlKernel
             $validationPipeline
         );
 
+        $jobQueue = new FilesystemJobQueue($runtimeDir);
+        $leaseSeconds = 60;
+        $leaseEnv = getenv('AEP_RUNTIME_LEASE_SECONDS');
+        if (is_string($leaseEnv) && is_numeric($leaseEnv)) {
+            $leaseSeconds = max(5, (int) $leaseEnv);
+        }
+        $this->runtimeWorker = new RuntimeWorker(
+            $jobQueue,
+            [new MissionExecutionJobHandler($engine)],
+            $leaseSeconds,
+        );
+        $inlineEnv = getenv('AEP_RUNTIME_INLINE');
+        $inline = is_string($inlineEnv) && filter_var($inlineEnv, FILTER_VALIDATE_BOOLEAN);
+        $this->jobDispatcher = new JobDispatcher($jobQueue, $this->runtimeWorker, $inline);
+        $runtimeCancel = new RuntimeCancellation(
+            $jobQueue,
+            $engine,
+            $this->executionOrchestrator,
+            $sessionStore,
+        );
+
         $this->auth = new AuthService(
             new JsonUserStore($authDir . '/users.json'),
             new FileSessionStore($sessionsDir)
@@ -480,7 +510,13 @@ final class MissionControlKernel
             $this->approvals,
             $this->health
         );
-        $this->commands = new MissionControlCommandFacade($missionCommands, $projectCommands, $engine);
+        $this->commands = new MissionControlCommandFacade(
+            $missionCommands,
+            $projectCommands,
+            $engine,
+            $this->jobDispatcher,
+            $runtimeCancel,
+        );
 
         $memoryRepo = new JsonProjectMemoryRepository($ameDir . '/memory');
         $intakeRepo = new JsonIntakeRepository($ameDir . '/intakes');
@@ -499,7 +535,7 @@ final class MissionControlKernel
                 new ParameterExtractor(),
                 new ContextAssembler($missionCatalog, $memoryRepo)
             ),
-            new LaunchFacade($missionCommands, $engine),
+            new LaunchFacade($missionCommands, $engine, $this->jobDispatcher),
             new EngineeringMemoryService($memoryRepo),
             $this->projects
         );
@@ -533,7 +569,7 @@ final class MissionControlKernel
             new GovernanceLaunchAdapter(
                 new OptimizationPlanningAdapter(
                     new AgentAssignmentAdapter(
-                        new PlanningLaunchAdapter($missionCommands, $engine),
+                        new PlanningLaunchAdapter($missionCommands, $engine, $this->jobDispatcher),
                         $agentCoordinator,
                         $agentSettings,
                     ),
@@ -632,6 +668,16 @@ final class MissionControlKernel
     public function executionEventStream(): ExecutionEventStreamService
     {
         return $this->executionEventStream;
+    }
+
+    public function jobDispatcher(): JobDispatcher
+    {
+        return $this->jobDispatcher;
+    }
+
+    public function runtimeWorker(): RuntimeWorker
+    {
+        return $this->runtimeWorker;
     }
 
     public function workspaces(): WorkspaceQueryService
