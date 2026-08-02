@@ -115,6 +115,7 @@ use Aep\Infrastructure\CodeReview\Store\FilesystemPatchStore;
 use Aep\Infrastructure\CodeReview\Store\JsonPatchSettingsStore;
 use Aep\Infrastructure\EngineeringExecution\Bridge\LegacyExecutorBridgeProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\ClaudeCodeCliProvider;
+use Aep\Infrastructure\EngineeringExecution\Provider\CodexCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\CursorCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\ExternalCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
@@ -183,7 +184,7 @@ final class MissionControlKernel
     private GovernanceObserveAdapter $governanceObserve;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '1.3.0')
+    public function __construct(string $dataRoot, string $version = '1.4.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -254,6 +255,7 @@ final class MissionControlKernel
             'stub-cli' => static fn (array $options): StubCliProvider => new StubCliProvider($options),
             'cursor-cli' => static fn (array $options): CursorCliProvider => new CursorCliProvider($options),
             'claude-code-cli' => static fn (array $options): ClaudeCodeCliProvider => new ClaudeCodeCliProvider($options),
+            'codex-cli' => static fn (array $options): CodexCliProvider => new CodexCliProvider($options),
             'external-cli' => static fn (array $options): ExternalCliProvider => new ExternalCliProvider($options),
             'legacy-local' => static fn (array $options): LegacyExecutorBridgeProvider => new LegacyExecutorBridgeProvider($legacyLocal, $options),
         ]);

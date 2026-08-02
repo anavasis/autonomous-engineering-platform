@@ -30,15 +30,21 @@
     },
     {
       "id": "codex",
-      "type": "stub-cli",
+      "type": "codex-cli",
       "enabled": true,
       "displayName": "OpenAI Codex",
       "options": {
-        "simulate": true,
+        "simulate": false,
+        "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": false,
+        "args": ["exec", "--sandbox", "workspace-write"],
         "capabilities": {
           "streaming": true,
           "cancel": true,
-          "resume": false,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
           "tools": true,
           "maxContextTokens": 128000,
           "costReporting": true
