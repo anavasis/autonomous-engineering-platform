@@ -76,15 +76,21 @@
     },
     {
       "id": "gemini-cli",
-      "type": "stub-cli",
+      "type": "gemini-cli",
       "enabled": true,
       "displayName": "Gemini CLI",
       "options": {
-        "simulate": true,
+        "simulate": false,
+        "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": false,
+        "args": ["-p"],
         "capabilities": {
           "streaming": true,
           "cancel": true,
-          "resume": false,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
           "tools": true,
           "maxContextTokens": 1000000,
           "costReporting": true
