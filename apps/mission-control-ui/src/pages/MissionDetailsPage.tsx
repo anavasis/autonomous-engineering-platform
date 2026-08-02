@@ -14,6 +14,7 @@ import {
   usePatches,
   useMissionMemory,
   useMissionAssignments,
+  useSettings,
   useTimeline,
   useValidation,
 } from '@/api/hooks';
@@ -62,9 +63,11 @@ export function MissionDetailsPage() {
     enabled: Boolean(missionId),
   });
   const providers = useExecutionProviders();
+  const settings = useSettings();
+  const sseEnabled = Boolean((settings.data?.features as Record<string, unknown> | undefined)?.sse);
   const missionExecution = useMissionExecution(missionId);
   const sessionId = String(missionExecution.data?.session?.sessionId ?? '');
-  const execEvents = useExecutionEvents(sessionId);
+  const execEvents = useExecutionEvents(sessionId, sseEnabled);
   const execPrompt = useExecutionPrompt(sessionId);
   const execMetrics = useExecutionMetrics(sessionId);
   const missionWorkspace = useMissionWorkspace(missionId);

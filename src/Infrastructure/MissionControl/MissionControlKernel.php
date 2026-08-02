@@ -41,6 +41,7 @@ use Aep\Application\EngineeringExecution\Service\ArtifactCapture;
 use Aep\Application\EngineeringExecution\Service\ContextPackager;
 use Aep\Application\EngineeringExecution\Service\DiffCollector;
 use Aep\Application\EngineeringExecution\Service\EngineeringExecutionOrchestrator;
+use Aep\Application\EngineeringExecution\Service\ExecutionEventStreamService;
 use Aep\Application\EngineeringExecution\Service\EngineeringExecutionQueryService;
 use Aep\Application\EngineeringExecution\Service\PromptPipeline;
 use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
@@ -172,6 +173,7 @@ final class MissionControlKernel
     private AutonomousMissionService $ame;
     private EngineeringExecutionQueryService $executionQuery;
     private EngineeringExecutionOrchestrator $executionOrchestrator;
+    private ExecutionEventStreamService $executionEventStream;
     private EngineeringWorkspaceService $engineeringWorkspaces;
     private WorkspaceQueryService $workspaceQuery;
     private PatchPipelineService $patchPipeline;
@@ -185,7 +187,7 @@ final class MissionControlKernel
     private GovernanceObserveAdapter $governanceObserve;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '1.5.0')
+    public function __construct(string $dataRoot, string $version = '1.6.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -272,6 +274,7 @@ final class MissionControlKernel
         );
         $this->workspaceQuery = new WorkspaceQueryService($this->engineeringWorkspaces, $workspaceSettings);
 
+        $this->executionEventStream = new ExecutionEventStreamService($sessionStore);
         $this->executionOrchestrator = new EngineeringExecutionOrchestrator(
             $registry,
             $sessionStore,
@@ -281,6 +284,11 @@ final class MissionControlKernel
             new DiffCollector(),
             new ArtifactCapture($artifactService),
             new ResultNormalizer(),
+            'provider_routing',
+            2,
+            20,
+            50,
+            $this->executionEventStream,
         );
         $this->executionQuery = new EngineeringExecutionQueryService($registry, $sessionStore, $settingsStore);
 
@@ -619,6 +627,11 @@ final class MissionControlKernel
     public function executionOrchestrator(): EngineeringExecutionOrchestrator
     {
         return $this->executionOrchestrator;
+    }
+
+    public function executionEventStream(): ExecutionEventStreamService
+    {
+        return $this->executionEventStream;
     }
 
     public function workspaces(): WorkspaceQueryService

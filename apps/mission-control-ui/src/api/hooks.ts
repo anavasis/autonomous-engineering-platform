@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiUser, setCsrfToken } from './client';
 
@@ -138,13 +139,89 @@ export function useMissionExecution(missionId: string) {
   });
 }
 
-export function useExecutionEvents(sessionId: string) {
-  return useQuery({
+export function useExecutionEvents(sessionId: string, sseEnabled = false) {
+  const poll = useQuery({
     queryKey: ['execution-events', sessionId],
     queryFn: () => api<{ items: Array<Record<string, unknown>> }>(`/execution/sessions/${sessionId}/events`),
-    enabled: Boolean(sessionId),
+    enabled: Boolean(sessionId) && !sseEnabled,
     refetchInterval: 2500,
   });
+
+  const [liveItems, setLiveItems] = useState<Array<Record<string, unknown>>>([]);
+  const [liveError, setLiveError] = useState<Error | null>(null);
+  const [streaming, setStreaming] = useState(false);
+
+  useEffect(() => {
+    if (!sseEnabled || !sessionId) {
+      setLiveItems([]);
+      setLiveError(null);
+      setStreaming(false);
+      return;
+    }
+
+    let closed = false;
+    let done = false;
+    let es: EventSource | null = null;
+    let afterSeq = 0;
+    const seen = new Set<number>();
+    setLiveItems([]);
+    setLiveError(null);
+    setStreaming(true);
+
+    const connect = () => {
+      if (closed || done) return;
+      const url = `/api/v1/execution/sessions/${encodeURIComponent(sessionId)}/events/stream?afterSeq=${afterSeq}`;
+      es = new EventSource(url, { withCredentials: true });
+
+      es.addEventListener('execution', (ev) => {
+        try {
+          const data = JSON.parse((ev as MessageEvent).data) as Record<string, unknown>;
+          const seq = Number(data.seq ?? 0);
+          if (!Number.isFinite(seq) || seen.has(seq)) {
+            return;
+          }
+          seen.add(seq);
+          afterSeq = Math.max(afterSeq, seq);
+          setLiveItems((prev) => [...prev, data]);
+        } catch {
+          // ignore malformed frames
+        }
+      });
+
+      es.addEventListener('done', () => {
+        done = true;
+        setStreaming(false);
+        es?.close();
+      });
+
+      es.onerror = () => {
+        es?.close();
+        if (closed || done) return;
+        // Resume from afterSeq without duplicates.
+        window.setTimeout(connect, 1000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      closed = true;
+      setStreaming(false);
+      es?.close();
+    };
+  }, [sessionId, sseEnabled]);
+
+  if (sseEnabled) {
+    return {
+      data: { items: liveItems },
+      isLoading: streaming && liveItems.length === 0,
+      isError: liveError !== null,
+      error: liveError,
+      isStreaming: streaming,
+    };
+  }
+
+  return { ...poll, isStreaming: false };
 }
 
 export function useExecutionPrompt(sessionId: string) {
