@@ -16,6 +16,15 @@ use Aep\Application\Optimization\Service\OptimizationEngine;
 use Aep\Application\Optimization\Service\OptimizationQueryService;
 use Aep\Application\Optimization\Service\ResourceAllocator as OptimizationResourceAllocator;
 use Aep\Application\Optimization\Service\ResourceManager;
+use Aep\Application\Governance\Policy\ApprovalPolicy;
+use Aep\Application\Governance\Policy\CompliancePolicy;
+use Aep\Application\Governance\Policy\SecurityPolicy;
+use Aep\Application\Governance\Service\AuditManager;
+use Aep\Application\Governance\Service\GovernanceManager;
+use Aep\Application\Governance\Service\GovernanceObserveFacade;
+use Aep\Application\Governance\Service\GovernanceQueryService;
+use Aep\Application\Governance\Service\ReleaseManager;
+use Aep\Application\Governance\Service\ReleasePipeline;
 use Aep\Application\Artifact\ArtifactService;
 use Aep\Application\CodeReview\Policy\PatchPolicyFactory;
 use Aep\Application\CodeReview\Service\ChangeManifestBuilder;
@@ -92,6 +101,10 @@ use Aep\Infrastructure\Optimization\Adapter\OptimizationPlanningAdapter;
 use Aep\Infrastructure\Optimization\Adapter\OptimizationProviderAdapter;
 use Aep\Infrastructure\Optimization\Store\FilesystemOptimizationStore;
 use Aep\Infrastructure\Optimization\Store\JsonOptimizationSettingsStore;
+use Aep\Infrastructure\Governance\Adapter\GovernanceLaunchAdapter;
+use Aep\Infrastructure\Governance\Adapter\GovernanceObserveAdapter;
+use Aep\Infrastructure\Governance\Store\FilesystemGovernanceStore;
+use Aep\Infrastructure\Governance\Store\JsonGovernanceSettingsStore;
 use Aep\Infrastructure\Artifact\FilesystemArtifactStore;
 use Aep\Infrastructure\Artifact\FilesystemWorkspaceManager;
 use Aep\Infrastructure\CodeReview\Adapter\PatchCreationAdapter;
@@ -163,9 +176,11 @@ final class MissionControlKernel
     private PlanningQueryService $planningQuery;
     private AgentQueryService $agentQuery;
     private OptimizationQueryService $optimizationQuery;
+    private GovernanceQueryService $governanceQuery;
+    private GovernanceObserveAdapter $governanceObserve;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '0.9.0')
+    public function __construct(string $dataRoot, string $version = '1.0.0')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -187,6 +202,7 @@ final class MissionControlKernel
         $planningDir = $this->dataRoot . '/planning';
         $agentsDir = $this->dataRoot . '/agents';
         $optimizationDir = $this->dataRoot . '/optimization';
+        $governanceDir = $this->dataRoot . '/governance';
 
         foreach ([
             $missionsDir,
@@ -204,6 +220,7 @@ final class MissionControlKernel
             $planningDir,
             $agentsDir,
             $optimizationDir,
+            $governanceDir,
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -353,6 +370,37 @@ final class MissionControlKernel
             $budgetManager,
         );
 
+        $governanceSettings = new JsonGovernanceSettingsStore($governanceDir);
+        $governanceStore = new FilesystemGovernanceStore($governanceDir);
+        $governanceConfig = $this->loadGovernanceConfig();
+        $auditManager = new AuditManager($governanceStore);
+        $governanceManager = new GovernanceManager($governanceStore, $governanceSettings, $auditManager);
+        $governanceManager->seedFromConfig($governanceConfig);
+        $releasePipeline = new ReleasePipeline(
+            $governanceStore,
+            $governanceSettings,
+            new CompliancePolicy(),
+            new SecurityPolicy(),
+        );
+        $releaseManager = new ReleaseManager(
+            $governanceStore,
+            $governanceSettings,
+            $releasePipeline,
+            $auditManager,
+            new ApprovalPolicy(),
+        );
+        $governanceObserveFacade = new GovernanceObserveFacade($releaseManager, $governanceManager, $governanceSettings);
+        $this->governanceObserve = new GovernanceObserveAdapter($governanceObserveFacade);
+        $this->governanceQuery = new GovernanceQueryService(
+            $governanceStore,
+            $governanceSettings,
+            $governanceManager,
+            $releaseManager,
+            $releasePipeline,
+            $auditManager,
+            $governanceObserveFacade,
+        );
+
         $routing = new ProviderRoutingExecutor($legacyLocal, $this->executionOrchestrator, $settingsStore);
         $optimizedRouting = new OptimizationProviderAdapter($routing, $optimizationEngine, $optimizationSettings);
         $execution = new ExecutionService(
@@ -464,14 +512,18 @@ final class MissionControlKernel
             new ProviderAllocator(),
             new WorkspaceAllocator(),
             new FailureRecoveryPolicy(),
-            new OptimizationPlanningAdapter(
-                new AgentAssignmentAdapter(
-                    new PlanningLaunchAdapter($missionCommands, $engine),
-                    $agentCoordinator,
-                    $agentSettings,
+            new GovernanceLaunchAdapter(
+                new OptimizationPlanningAdapter(
+                    new AgentAssignmentAdapter(
+                        new PlanningLaunchAdapter($missionCommands, $engine),
+                        $agentCoordinator,
+                        $agentSettings,
+                    ),
+                    $optimizationEngine,
+                    $optimizationSettings,
                 ),
-                $optimizationEngine,
-                $optimizationSettings,
+                $governanceObserveFacade,
+                $governanceSettings,
             ),
             $criticalPath,
             $replanner,
@@ -604,6 +656,16 @@ final class MissionControlKernel
         return $this->optimizationQuery;
     }
 
+    public function governance(): GovernanceQueryService
+    {
+        return $this->governanceQuery;
+    }
+
+    public function governanceObserve(): GovernanceObserveAdapter
+    {
+        return $this->governanceObserve;
+    }
+
     public function dataRoot(): string
     {
         return $this->dataRoot;
@@ -628,7 +690,6 @@ final class MissionControlKernel
     }
 
     /** @return array<string, mixed> */
-    /** @return array<string, mixed> */
     private function loadOptimizationConfig(): array
     {
         $path = getenv('AEP_OPTIMIZATION_CONFIG') ?: (dirname(__DIR__, 3) . '/deploy/optimization.json');
@@ -638,6 +699,21 @@ final class MissionControlKernel
         $data = json_decode((string) file_get_contents($path), true);
         if (!is_array($data)) {
             throw new \RuntimeException('Invalid optimization config.');
+        }
+
+        return $data;
+    }
+
+    /** @return array<string, mixed> */
+    private function loadGovernanceConfig(): array
+    {
+        $path = getenv('AEP_GOVERNANCE_CONFIG') ?: (dirname(__DIR__, 3) . '/deploy/governance.json');
+        if (!is_file($path)) {
+            return ['environments' => [], 'targets' => []];
+        }
+        $data = json_decode((string) file_get_contents($path), true);
+        if (!is_array($data)) {
+            throw new \RuntimeException('Invalid governance config.');
         }
 
         return $data;
