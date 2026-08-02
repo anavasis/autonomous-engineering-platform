@@ -53,6 +53,9 @@ $testFiles = [
     __DIR__ . '/Application/Optimization/OptimizationEngineTest.php',
     __DIR__ . '/Infrastructure/Optimization/FilesystemOptimizationStoreTest.php',
     __DIR__ . '/Infrastructure/Optimization/OptimizationAdaptersTest.php',
+    __DIR__ . '/Application/Governance/ReleaseManagerTest.php',
+    __DIR__ . '/Infrastructure/Governance/FilesystemGovernanceStoreTest.php',
+    __DIR__ . '/Infrastructure/Governance/GovernanceAdaptersTest.php',
 ];
 
 $passed = 0;

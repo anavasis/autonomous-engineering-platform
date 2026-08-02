@@ -691,3 +691,87 @@ export function useOptimizationSettings() {
   });
 }
 
+export function useGovernanceDashboard() {
+  return useQuery({
+    queryKey: ['governance-dashboard'],
+    queryFn: () => api<Record<string, unknown>>('/governance/dashboard'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useReleases() {
+  return useQuery({
+    queryKey: ['releases'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/releases'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useGovernanceApprovals() {
+  return useQuery({
+    queryKey: ['governance-approvals'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/governance/approvals'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useDeployments() {
+  return useQuery({
+    queryKey: ['deployments'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/deployments'),
+    refetchInterval: 5000,
+  });
+}
+
+export function useGovernanceAudit() {
+  return useQuery({
+    queryKey: ['governance-audit'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/governance/audit'),
+    refetchInterval: 8000,
+  });
+}
+
+export function useGovernanceCompliance() {
+  return useQuery({
+    queryKey: ['governance-compliance'],
+    queryFn: () => api<Record<string, unknown>>('/governance/compliance'),
+    refetchInterval: 8000,
+  });
+}
+
+export function useQualityGates() {
+  return useQuery({
+    queryKey: ['quality-gates'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/quality-gates'),
+  });
+}
+
+export function useRollbacks() {
+  return useQuery({
+    queryKey: ['rollbacks'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/rollbacks'),
+    refetchInterval: 8000,
+  });
+}
+
+export function useEnvironments() {
+  return useQuery({
+    queryKey: ['environments'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/environments'),
+  });
+}
+
+export function useGovernanceTimeline() {
+  return useQuery({
+    queryKey: ['governance-timeline'],
+    queryFn: () => api<{ items: Array<Record<string, unknown>> }>('/governance/timeline'),
+    refetchInterval: 4000,
+  });
+}
+
+export function useGovernanceSettings() {
+  return useQuery({
+    queryKey: ['governance-settings'],
+    queryFn: () => api<{ settings: Record<string, unknown> }>('/settings/governance'),
+  });
+}

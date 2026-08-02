@@ -408,7 +408,7 @@ final class HttpKernel
         if ($method === 'GET' && $path === '/settings') {
             JsonResponse::send([
                 'product' => 'AEP Mission Control',
-                'version' => '0.9.0',
+                'version' => '1.0.0',
                 'deployment' => 'aep.anavasis.tech',
                 'pollIntervalSeconds' => 5,
                 'features' => [
@@ -422,6 +422,7 @@ final class HttpKernel
                     'autonomousPlanningScheduling' => true,
                     'multiAgentCollaboration' => true,
                     'resourceCostCapacityOptimization' => true,
+                    'engineeringGovernance' => true,
                 ],
                 'health' => $this->app->health()->probe(),
                 'user' => $user->toPublicArray(),
@@ -432,6 +433,7 @@ final class HttpKernel
                 'planning' => $this->app->planning()->settings(),
                 'agents' => $this->app->agents()->settings(),
                 'optimization' => $this->app->optimization()->settings(),
+                'governance' => $this->app->governance()->settings(),
             ]);
 
             return;
@@ -846,6 +848,263 @@ final class HttpKernel
                 static fn (array $c): bool => ($c['missionId'] ?? null) === $m[1]
             ));
             JsonResponse::send(['decisions' => $items, 'costs' => $costs]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/settings/governance') {
+            JsonResponse::send(['settings' => $this->app->governance()->settings()]);
+
+            return;
+        }
+
+        if ($method === 'PUT' && $path === '/settings/governance') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['settings' => $this->app->governance()->updateSettings($this->jsonBody())]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/governance/dashboard') {
+            JsonResponse::send($this->app->governance()->dashboard());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/governance/approvals') {
+            JsonResponse::send(['items' => $this->app->governance()->governanceApprovals()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/governance/audit') {
+            $limit = isset($_GET['limit']) && is_numeric($_GET['limit']) ? (int) $_GET['limit'] : 200;
+            JsonResponse::send(['items' => $this->app->governance()->audit($limit)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/governance/compliance') {
+            JsonResponse::send($this->app->governance()->compliance());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/governance/timeline') {
+            $limit = isset($_GET['limit']) && is_numeric($_GET['limit']) ? (int) $_GET['limit'] : 100;
+            JsonResponse::send(['items' => $this->app->governance()->timeline($limit)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/governance/metrics') {
+            JsonResponse::send($this->app->governance()->metrics());
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/change-requests') {
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            JsonResponse::send(['items' => $this->app->governance()->changeRequests($status)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/change-requests') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['item' => $this->app->governance()->createChangeRequest($this->jsonBody(), $user->username())], 201);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/change-requests/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->governance()->changeRequest($m[1]);
+            if ($item === null) {
+                JsonResponse::send(['error' => 'not_found', 'message' => 'Change request not found.'], 404);
+
+                return;
+            }
+            JsonResponse::send(['item' => $item]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/releases') {
+            $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null;
+            JsonResponse::send(['items' => $this->app->governance()->releases($status)]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/releases') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['item' => $this->app->governance()->createRelease($this->jsonBody(), $user->username())], 201);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/releases/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->governance()->release($m[1]);
+            if ($item === null) {
+                JsonResponse::send(['error' => 'not_found', 'message' => 'Release not found.'], 404);
+
+                return;
+            }
+            JsonResponse::send(['item' => $item]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/submit$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $evidence = is_array($body['evidence'] ?? null) ? $body['evidence'] : $body;
+            JsonResponse::send(['item' => $this->app->governance()->submitRelease($m[1], $evidence, $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/approve$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::APPROVER);
+            $body = $this->jsonBody();
+            $stageId = is_string($body['stageId'] ?? null) ? $body['stageId'] : 'engineering';
+            JsonResponse::send(['item' => $this->app->governance()->approveRelease($m[1], $stageId, $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/reject$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::APPROVER);
+            $body = $this->jsonBody();
+            $stageId = is_string($body['stageId'] ?? null) ? $body['stageId'] : 'engineering';
+            JsonResponse::send(['item' => $this->app->governance()->rejectRelease($m[1], $stageId, $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/schedule$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $when = is_string($body['scheduledAtUtc'] ?? null) ? $body['scheduledAtUtc'] : date('c');
+            JsonResponse::send(['item' => $this->app->governance()->scheduleRelease($m[1], $when, $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/promote$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $envId = is_string($body['environmentId'] ?? null) ? $body['environmentId'] : '';
+            try {
+                JsonResponse::send(['item' => $this->app->governance()->promoteRelease($m[1], $envId, $user->username())]);
+            } catch (\Throwable $e) {
+                JsonResponse::send(['error' => 'promotion_blocked', 'message' => $e->getMessage()], 409);
+            }
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/deploy$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $envId = is_string($body['environmentId'] ?? null) ? $body['environmentId'] : 'env_development';
+            try {
+                JsonResponse::send(['item' => $this->app->governance()->deployRelease($m[1], $envId, $user->username())]);
+            } catch (\Throwable $e) {
+                JsonResponse::send(['error' => 'deploy_failed', 'message' => $e->getMessage()], 409);
+            }
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/archive$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['item' => $this->app->governance()->archiveRelease($m[1], $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/releases/([A-Za-z0-9_-]+)/gates/evaluate$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            $body = $this->jsonBody();
+            $evidence = is_array($body['evidence'] ?? null) ? $body['evidence'] : $body;
+            JsonResponse::send(['items' => $this->app->governance()->evaluateGates($m[1], $evidence)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/environments') {
+            JsonResponse::send(['items' => $this->app->governance()->environments()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/deployments') {
+            $releaseId = isset($_GET['releaseId']) && is_string($_GET['releaseId']) ? $_GET['releaseId'] : null;
+            JsonResponse::send(['items' => $this->app->governance()->deployments($releaseId)]);
+
+            return;
+        }
+
+        if ($method === 'GET' && preg_match('#^/deployments/([A-Za-z0-9_-]+)$#', $path, $m) === 1) {
+            $item = $this->app->governance()->deployment($m[1]);
+            if ($item === null) {
+                JsonResponse::send(['error' => 'not_found', 'message' => 'Deployment not found.'], 404);
+
+                return;
+            }
+            JsonResponse::send(['item' => $item]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/quality-gates') {
+            JsonResponse::send(['items' => $this->app->governance()->qualityGates()]);
+
+            return;
+        }
+
+        if ($method === 'GET' && $path === '/rollbacks') {
+            JsonResponse::send(['items' => $this->app->governance()->rollbacks()]);
+
+            return;
+        }
+
+        if ($method === 'POST' && $path === '/rollbacks') {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            try {
+                JsonResponse::send(['item' => $this->app->governance()->createRollback($this->jsonBody(), $user->username())], 201);
+            } catch (\Throwable $e) {
+                JsonResponse::send(['error' => 'rollback_blocked', 'message' => $e->getMessage()], 409);
+            }
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/rollbacks/([A-Za-z0-9_-]+)/start$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['item' => $this->app->governance()->startRollback($m[1], $user->username())]);
+
+            return;
+        }
+
+        if ($method === 'POST' && preg_match('#^/rollbacks/([A-Za-z0-9_-]+)/complete$#', $path, $m) === 1) {
+            $this->requireCsrf();
+            $this->app->auth()->assertRole($user, Role::OPERATOR);
+            JsonResponse::send(['item' => $this->app->governance()->completeRollback($m[1], $user->username())]);
 
             return;
         }
@@ -1326,7 +1585,12 @@ final class HttpKernel
             $this->app->auth()->assertRole($user, Role::APPROVER);
             $body = $this->jsonBody();
             $summary = is_string($body['summary'] ?? null) ? (string) $body['summary'] : 'Approved by human';
-            JsonResponse::send($this->app->patchPipeline()->humanApprove($m[1], $user->username(), $summary)->toArray());
+            $approved = $this->app->patchPipeline()->humanApprove($m[1], $user->username(), $summary);
+            try {
+                $this->app->governanceObserve()->onPatchApproved($approved->toArray(), $user->username());
+            } catch (\Throwable) {
+            }
+            JsonResponse::send($approved->toArray());
 
             return;
         }
@@ -1348,6 +1612,10 @@ final class HttpKernel
             $sealed = $this->app->patchPipeline()->seal($m[1]);
             try {
                 $this->app->knowledgeCapture()->capturePatchEvent($m[1], 'patch.sealed', $sealed->toArray());
+            } catch (\Throwable) {
+            }
+            try {
+                $this->app->governanceObserve()->onPatchSealed($sealed->toArray(), $user->username());
             } catch (\Throwable) {
             }
             JsonResponse::send($sealed->toArray());
