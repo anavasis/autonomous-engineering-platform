@@ -8,12 +8,14 @@
     },
     {
       "id": "cursor",
-      "type": "stub-cli",
+      "type": "cursor-cli",
       "enabled": true,
       "displayName": "Cursor Agent",
       "options": {
-        "simulate": true,
+        "simulate": false,
         "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": true,
         "capabilities": {
           "streaming": true,
           "cancel": true,
