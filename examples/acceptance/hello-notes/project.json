@@ -68,7 +68,7 @@
       "id": "docker_compose_exists",
       "type": "file_exists",
       "params": { "path": "docker-compose.yml" },
-      "description": "Docker Compose present (shared by reference + generated workspaces)"
+      "description": "Docker support present (compose). Dockerfile asserted by RuntimeAcceptanceTest on generated workspace."
     },
     {
       "id": "backend_exists",
@@ -143,7 +143,6 @@
     "provider": "github",
     "repository": "local/hello-notes",
     "timeoutSeconds": 120,
-    "referenceWorkspace": "workspace",
     "clarifyAnswers": {}
   }
 }
