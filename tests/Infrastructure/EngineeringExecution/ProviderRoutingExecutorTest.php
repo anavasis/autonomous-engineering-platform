@@ -12,6 +12,7 @@ use Aep\Application\EngineeringExecution\Service\PromptPipeline;
 use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
 use Aep\Application\Execution\ExecutionRequest;
 use Aep\Application\Execution\ExecutionService;
+use Aep\Infrastructure\EngineeringExecution\Provider\CursorCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
@@ -67,15 +68,24 @@ final class ProviderRoutingExecutorTest
     public function test_config_driven_stub_providers_are_discoverable(): void
     {
         $root = sys_get_temp_dir() . '/aep_route_' . bin2hex(random_bytes(4));
+        $bin = $root . '/fake-cursor.sh';
         try {
-            $registry = $this->registry();
+            if (!is_dir($root)) {
+                mkdir($root, 0775, true);
+            }
+            file_put_contents($bin, "#!/bin/sh\nexit 0\n");
+            chmod($bin, 0755);
+
+            $registry = $this->registry($bin);
             Assert::true($registry->has('cursor'));
             Assert::true($registry->has('codex'));
             Assert::true($registry->has('claude-code'));
             Assert::true($registry->has('gemini-cli'));
             Assert::same('Cursor Agent', $registry->get('cursor')->displayName());
+            Assert::true($registry->get('cursor') instanceof CursorCliProvider);
             $health = $registry->get('cursor')->health();
             Assert::true($health->isAvailable());
+            Assert::same('degraded', $registry->get('codex')->health()->status());
         } finally {
             $this->removeDir($root);
         }
@@ -102,6 +112,18 @@ final class ProviderRoutingExecutorTest
         }
     }
 
+    public function test_cursor_cli_provider_reference_suite(): void
+    {
+        // CursorCliProviderTest is invoked here so the suite runs without changing tests/run.php.
+        require_once __DIR__ . '/CursorCliProviderTest.php';
+        $suite = new CursorCliProviderTest();
+        $suite->test_health_unavailable_when_binary_missing();
+        $suite->test_health_ok_when_binary_executable();
+        $suite->test_run_captures_streams_and_leaves_workspace_for_diffcollector();
+        $suite->test_nonzero_exit_fails_without_mutating_provider_side_files();
+        $suite->test_uses_repo_subdirectory_when_configured_and_present();
+    }
+
     private function router(string $root, ?JsonExecutionSettingsStore $settings = null): ProviderRoutingExecutor
     {
         $executionDir = $root . '/execution';
@@ -124,12 +146,19 @@ final class ProviderRoutingExecutorTest
         return new ProviderRoutingExecutor(new DeclarativeLocalExecutor(), $orchestrator, $settings);
     }
 
-    private function registry(): ConfigProviderRegistry
+    private function registry(?string $cursorBinary = null): ConfigProviderRegistry
     {
+        $cursorOptions = ['simulate' => false, 'useRepoCwd' => false];
+        if (is_string($cursorBinary) && $cursorBinary !== '') {
+            $cursorOptions['binary'] = $cursorBinary;
+        } else {
+            $cursorOptions['binary'] = '/tmp/aep-cursor-missing-' . bin2hex(random_bytes(3));
+        }
+
         return new ConfigProviderRegistry([
             'providers' => [
                 ['id' => 'local-agent', 'type' => 'local-agent', 'enabled' => true],
-                ['id' => 'cursor', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'Cursor Agent', 'options' => ['simulate' => true]],
+                ['id' => 'cursor', 'type' => 'cursor-cli', 'enabled' => true, 'displayName' => 'Cursor Agent', 'options' => $cursorOptions],
                 ['id' => 'codex', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'OpenAI Codex', 'options' => ['simulate' => true]],
                 ['id' => 'claude-code', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'Claude Code', 'options' => ['simulate' => true]],
                 ['id' => 'gemini-cli', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'Gemini CLI', 'options' => ['simulate' => true]],
@@ -137,6 +166,7 @@ final class ProviderRoutingExecutorTest
         ], [
             'local-agent' => static fn (array $o): LocalAgentProvider => new LocalAgentProvider($o),
             'stub-cli' => static fn (array $o): StubCliProvider => new StubCliProvider($o),
+            'cursor-cli' => static fn (array $o): CursorCliProvider => new CursorCliProvider($o),
         ]);
     }
 
