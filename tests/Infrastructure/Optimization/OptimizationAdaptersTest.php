@@ -66,13 +66,33 @@ final class OptimizationAdaptersTest
                 }
             };
             $adapter = new OptimizationProviderAdapter($inner, $engine, $settings);
+            Assert::same('capture', $adapter->id());
             $result = $adapter->execute(new ExecutionRequest('msn_x', 'implement', '2026-01-01T00:00:00Z', []));
             Assert::true($result->isSucceeded());
+            Assert::same('capture', $result->executorId());
             Assert::true(is_string($result->context()['providerId'] ?? null));
             Assert::true(count((new FilesystemOptimizationStore($root))->listCosts()) >= 1);
         } finally {
             $this->removeDir($root);
         }
+    }
+
+    public function test_executor_identity_regression_adapter_delegates_id(): void
+    {
+        require_once __DIR__ . '/ExecutorIdentityRegressionTest.php';
+        (new ExecutorIdentityRegressionTest())->test_adapter_id_delegates_to_inner_executor();
+    }
+
+    public function test_executor_identity_regression_execution_service_path(): void
+    {
+        require_once __DIR__ . '/ExecutorIdentityRegressionTest.php';
+        (new ExecutorIdentityRegressionTest())->test_execution_service_accepts_result_through_transparent_adapter();
+    }
+
+    public function test_executor_identity_regression_mission_start_resume_pipeline(): void
+    {
+        require_once __DIR__ . '/ExecutorIdentityRegressionTest.php';
+        (new ExecutorIdentityRegressionTest())->test_mission_start_inspection_resume_implementation_without_executor_mismatch();
     }
 
     private function engine(string $root): OptimizationEngine
