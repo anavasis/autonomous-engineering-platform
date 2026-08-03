@@ -413,7 +413,7 @@ final class HttpKernel
                 'pollIntervalSeconds' => 5,
                 'features' => [
                     'assignedAgent' => true,
-                    'sse' => false,
+                    'sse' => $this->sseEnabled(),
                     'autonomousMissionExecution' => true,
                     'engineeringExecutionProviders' => true,
                     'engineeringWorkspaces' => true,
@@ -1804,6 +1804,24 @@ final class HttpKernel
             return;
         }
 
+        if ($method === 'GET' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/events/stream$#', $path, $m) === 1) {
+            $session = $this->app->execution()->session($m[1]);
+            if ($session === null) {
+                JsonResponse::problem('Not Found', 404, 'Execution session not found.');
+
+                return;
+            }
+            $after = isset($_GET['afterSeq']) ? (int) $_GET['afterSeq'] : 0;
+            $lastEventId = $_SERVER['HTTP_LAST_EVENT_ID'] ?? null;
+            if (is_string($lastEventId) && is_numeric($lastEventId)) {
+                $after = max($after, (int) $lastEventId);
+            }
+            // Stream owns the response body; bypass JsonResponse.
+            $this->app->executionEventStream()->streamHttp($m[1], $after);
+
+            return;
+        }
+
         if ($method === 'GET' && preg_match('#^/execution/sessions/([A-Za-z0-9_-]+)/prompt$#', $path, $m) === 1) {
             $item = $this->app->execution()->promptPreview($m[1]);
             if ($item === null) {
@@ -1978,5 +1996,15 @@ final class HttpKernel
 
         /** @var array<string, mixed> $data */
         return $data;
+    }
+
+    private function sseEnabled(): bool
+    {
+        $raw = getenv('AEP_SSE_ENABLED');
+        if ($raw === false || $raw === '') {
+            return true;
+        }
+
+        return filter_var($raw, FILTER_VALIDATE_BOOLEAN);
     }
 }

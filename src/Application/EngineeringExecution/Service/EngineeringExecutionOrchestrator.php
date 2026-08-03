@@ -14,6 +14,7 @@ use Aep\Application\EngineeringExecution\Port\ProviderRegistry;
 use Aep\Application\Execution\ExecutionRequest;
 use Aep\Application\Execution\ExecutionResult;
 use Aep\Application\MissionControl\Support\Utc;
+use Aep\Infrastructure\EngineeringExecution\Provider\AbstractBufferedProvider;
 
 /**
  * Provider-agnostic engineering execution orchestrator.
@@ -23,6 +24,11 @@ use Aep\Application\MissionControl\Support\Utc;
  */
 final class EngineeringExecutionOrchestrator
 {
+    private readonly ExecutionEventStreamService $eventStream;
+
+    /** @var array<string, int> sessionId => last live-forwarded provider-local seq */
+    private array $liveForwardedProviderSeq = [];
+
     public function __construct(
         private readonly ProviderRegistry $registry,
         private readonly ExecutionSessionStore $sessions,
@@ -36,7 +42,9 @@ final class EngineeringExecutionOrchestrator
         private readonly int $maxRetries = 2,
         private readonly int $pollIntervalMs = 20,
         private readonly int $maxPolls = 50,
+        ?ExecutionEventStreamService $eventStream = null,
     ) {
+        $this->eventStream = $eventStream ?? new ExecutionEventStreamService($sessions);
     }
 
     public function execute(ExecutionRequest $request): ExecutionResult
@@ -297,8 +305,13 @@ final class EngineeringExecutionOrchestrator
         $this->sessions->save($session);
         $this->audit($sessionId, 'session.resume', ['checkpoint' => $checkpoint]);
 
-        $provider->resume($sessionId, $checkpoint);
-        $result = $this->drain($provider, $sessionId);
+        $this->attachLiveForwarding($provider, $sessionId);
+        try {
+            $provider->resume($sessionId, $checkpoint);
+            $result = $this->drain($provider, $sessionId);
+        } finally {
+            $this->detachLiveForwarding($provider, $sessionId);
+        }
         $session = $this->requireSession($sessionId);
         $session->usage()->addTokens(
             $result->usage()->toArray()['inputTokens'],
@@ -330,8 +343,13 @@ final class EngineeringExecutionOrchestrator
 
             try {
                 $this->appendOrchestratorEvent($sessionId, 'provider.start', 'Starting provider attempt ' . ($attempt + 1));
-                $provider->start($request);
-                $last = $this->drain($provider, $sessionId);
+                $this->attachLiveForwarding($provider, $sessionId);
+                try {
+                    $provider->start($request);
+                    $last = $this->drain($provider, $sessionId);
+                } finally {
+                    $this->detachLiveForwarding($provider, $sessionId);
+                }
                 if ($last->isSucceeded() || $last->status() === ProviderResult::CANCELLED || $last->isRejected()) {
                     return $last;
                 }
@@ -376,9 +394,13 @@ final class EngineeringExecutionOrchestrator
 
             $events = $provider->poll($sessionId, $afterSeq);
             $sawTerminal = false;
+            $forwardedThrough = $this->liveForwardedProviderSeq[$sessionId] ?? 0;
             foreach ($events as $event) {
-                $this->sessions->appendEvent($sessionId, $event);
                 $afterSeq = max($afterSeq, $event->seq());
+                // Live-forwarded events were already persisted + published by the orchestrator.
+                if ($event->seq() > $forwardedThrough) {
+                    $this->persistAndPublish($sessionId, $event->type(), $event->message(), $event->data());
+                }
                 if (in_array($event->type(), [
                     'completed',
                     'failed',
@@ -411,9 +433,52 @@ final class EngineeringExecutionOrchestrator
 
     private function appendOrchestratorEvent(string $sessionId, string $type, string $message, array $data = []): void
     {
+        $this->persistAndPublish($sessionId, $type, $message, $data);
+    }
+
+    /**
+     * Persist a ProviderEvent into the session store and forward to the stream service.
+     * Store seq is monotonic and independent of provider-local seq.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function persistAndPublish(string $sessionId, string $type, string $message, array $data = []): ProviderEvent
+    {
         $events = $this->sessions->events($sessionId);
         $seq = $events === [] ? 1 : ($events[array_key_last($events)]->seq() + 1);
-        $this->sessions->appendEvent($sessionId, new ProviderEvent($seq, $type, $message, Utc::now(), $data));
+        $event = new ProviderEvent($seq, $type, $message, Utc::now(), $data);
+        $this->sessions->appendEvent($sessionId, $event);
+        $this->eventStream->publish($sessionId, $event);
+
+        return $event;
+    }
+
+    private function attachLiveForwarding(EngineeringExecutionProvider $provider, string $sessionId): void
+    {
+        if (!$provider instanceof AbstractBufferedProvider) {
+            return;
+        }
+        $this->liveForwardedProviderSeq[$sessionId] = 0;
+        $provider->setEventObserver(function (string $sid, ProviderEvent $event) use ($sessionId): void {
+            if ($sid !== $sessionId) {
+                return;
+            }
+            $data = $event->data();
+            $data['providerSeq'] = $event->seq();
+            $this->persistAndPublish($sessionId, $event->type(), $event->message(), $data);
+            $this->liveForwardedProviderSeq[$sessionId] = max(
+                $this->liveForwardedProviderSeq[$sessionId] ?? 0,
+                $event->seq()
+            );
+        });
+    }
+
+    private function detachLiveForwarding(EngineeringExecutionProvider $provider, string $sessionId): void
+    {
+        if ($provider instanceof AbstractBufferedProvider) {
+            $provider->setEventObserver(null);
+        }
+        unset($this->liveForwardedProviderSeq[$sessionId]);
     }
 
     /** @param array<string, mixed> $data */

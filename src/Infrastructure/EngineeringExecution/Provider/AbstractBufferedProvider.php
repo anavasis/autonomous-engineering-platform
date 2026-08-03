@@ -21,11 +21,24 @@ abstract class AbstractBufferedProvider implements EngineeringExecutionProvider
     /** @var array<string, array{events: list<ProviderEvent>, result: ?ProviderResult, cancelled: bool, request: ?ProviderSessionRequest}> */
     private array $sessions = [];
 
+    /** @var null|callable(string $sessionId, ProviderEvent $event): void */
+    private $eventObserver = null;
+
     public function __construct(
         private readonly string $providerId,
         private readonly string $name,
         private readonly ProviderCapabilities $capabilities,
     ) {
+    }
+
+    /**
+     * Orchestrator-owned observer. Providers still only emit; persistence/streaming is external.
+     *
+     * @param null|callable(string $sessionId, ProviderEvent $event): void $observer
+     */
+    public function setEventObserver(?callable $observer): void
+    {
+        $this->eventObserver = $observer;
     }
 
     public function id(): string
@@ -126,7 +139,11 @@ abstract class AbstractBufferedProvider implements EngineeringExecutionProvider
     {
         $this->ensure($sessionId);
         $seq = count($this->sessions[$sessionId]['events']) + 1;
-        $this->sessions[$sessionId]['events'][] = new ProviderEvent($seq, $type, $message, Utc::now(), $data);
+        $event = new ProviderEvent($seq, $type, $message, Utc::now(), $data);
+        $this->sessions[$sessionId]['events'][] = $event;
+        if ($this->eventObserver !== null) {
+            ($this->eventObserver)($sessionId, $event);
+        }
     }
 
     protected function isCancelled(string $sessionId): bool

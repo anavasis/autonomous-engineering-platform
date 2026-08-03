@@ -182,6 +182,15 @@ final class ProviderRoutingExecutorTest
         $suite->test_json_args_remain_configurable();
     }
 
+    public function test_execution_event_stream_suite(): void
+    {
+        require_once __DIR__ . '/ExecutionEventStreamServiceTest.php';
+        $suite = new ExecutionEventStreamServiceTest();
+        $suite->test_stream_emits_events_after_seq_and_done_on_terminal_session();
+        $suite->test_orchestrator_persists_provider_events_during_run();
+        $suite->test_format_event_reuses_provider_event_payload();
+    }
+
     private function router(string $root, ?JsonExecutionSettingsStore $settings = null): ProviderRoutingExecutor
     {
         $executionDir = $root . '/execution';
