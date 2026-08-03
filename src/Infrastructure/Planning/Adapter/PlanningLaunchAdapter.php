@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aep\Infrastructure\Planning\Adapter;
 
 use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Model\JobPriority;
 use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\Mission\Command\CreateMission;
 use Aep\Application\Mission\Command\DefineScope;
@@ -100,16 +101,31 @@ final class PlanningLaunchAdapter implements PlanningLaunchPort
             ];
         }
 
-        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
-            'action' => 'start',
-            'runId' => $runId,
-            'missionId' => $missionId,
-            'actorType' => 'system',
-            'actorId' => $actorId,
-            'projectId' => $program->projectId(),
-            'attributes' => $attributes,
-            'occurredAtUtc' => $at,
-        ]);
+        $job = $this->runtime->enqueue(
+            MissionExecutionJobHandler::TYPE,
+            [
+                'action' => 'start',
+                'runId' => $runId,
+                'missionId' => $missionId,
+                'actorType' => 'system',
+                'actorId' => $actorId,
+                'projectId' => $program->projectId(),
+                'attributes' => $attributes,
+                'occurredAtUtc' => $at,
+            ],
+            null,
+            JobPriority::NORMAL,
+            array_filter([
+                'provider' => 'github',
+                'repository' => 'local/planning-program',
+                'requestedBy' => $actorId,
+                'programId' => $program->programId(),
+                'programNodeId' => $node->nodeId(),
+                'projectId' => $program->projectId(),
+                'runId' => $runId,
+                'missionId' => $missionId,
+            ], static fn ($v) => $v !== null && $v !== ''),
+        );
 
         return [
             'missionId' => $missionId,

@@ -6,9 +6,10 @@ namespace Tests\Application\ExecutionRuntime;
 
 use Aep\Application\Execution\ExecutionService;
 use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Model\JobPriority;
+use Aep\Application\ExecutionRuntime\Model\RuntimeEvent;
 use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\ExecutionRuntime\Service\RuntimeWorker;
-use Aep\Application\Mission\Command\CreateMission;
 use Aep\Application\Mission\MissionCommandService;
 use Aep\Application\MissionControl\Auth\Role;
 use Aep\Application\MissionControl\Auth\User;
@@ -22,6 +23,7 @@ use Aep\Application\MissionExecution\Service\LaunchFacade;
 use Aep\Application\Validation\ValidationPipeline;
 use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 use Aep\Infrastructure\ExecutionRuntime\FilesystemJobQueue;
+use Aep\Infrastructure\ExecutionRuntime\FilesystemRuntimeEventStore;
 use Aep\Infrastructure\MissionEngine\InMemoryMissionRunRepository;
 use Aep\Infrastructure\Persistence\InMemoryMissionRepository;
 use Aep\Infrastructure\Validation\DeclarativeContextValidationStep;
@@ -33,16 +35,29 @@ final class MissionExecutionRuntimeTest
     {
         $root = sys_get_temp_dir() . '/aep_rt_me_' . bin2hex(random_bytes(4));
         try {
-            [$launch, $worker, $queue] = $this->build($root, false);
+            [$launch, $worker, $queue, $events] = $this->build($root, false);
             $result = $launch->launch($this->actor(), $this->readyIntake(), $this->plan('in_1'));
             Assert::same('planned', $result['engineState']);
             Assert::true(isset($result['jobId']));
-            Assert::same('queued', $queue->get((string) $result['jobId'])?->status());
+            $job = $queue->get((string) $result['jobId']);
+            Assert::same('queued', $job?->status());
+            Assert::same(JobPriority::NORMAL, $job?->priority());
+            Assert::same('github', $job?->metadata()['provider'] ?? null);
+            Assert::same('org/repo', $job?->metadata()['repository'] ?? null);
+            Assert::same('user_rt', $job?->metadata()['requestedBy'] ?? null);
 
             Assert::same(1, $worker->processAvailable('test-worker', 1));
             $job = $queue->get((string) $result['jobId']);
             Assert::same('completed', $job?->status());
             Assert::same(MissionRunState::WAITING, $job?->result()['engineState'] ?? null);
+
+            $types = array_map(
+                static fn (RuntimeEvent $e) => $e->type(),
+                $events->forJob((string) $result['jobId'])
+            );
+            Assert::true(in_array(RuntimeEvent::JOB_QUEUED, $types, true));
+            Assert::true(in_array(RuntimeEvent::JOB_CLAIMED, $types, true));
+            Assert::true(in_array(RuntimeEvent::COMPLETED, $types, true));
         } finally {
             $this->removeDir($root);
         }
@@ -66,19 +81,21 @@ final class MissionExecutionRuntimeTest
     {
         $root = sys_get_temp_dir() . '/aep_rt_cancel_' . bin2hex(random_bytes(4));
         try {
-            [$launch, $worker, $queue] = $this->build($root, false);
+            [$launch, $worker, $queue, $events] = $this->build($root, false);
             $result = $launch->launch($this->actor(), $this->readyIntake('in_3'), $this->plan('in_3'));
             $jobId = (string) $result['jobId'];
             $queue->requestCancel($jobId, 'stop-now', Utc::now());
             Assert::same(0, $worker->processAvailable('w-cancel', 5));
             Assert::same('cancelled', $queue->get($jobId)?->status());
+            $types = array_map(static fn (RuntimeEvent $e) => $e->type(), $events->forJob($jobId));
+            Assert::true(in_array(RuntimeEvent::CANCELLED, $types, true));
         } finally {
             $this->removeDir($root);
         }
     }
 
     /**
-     * @return array{0: LaunchFacade, 1: RuntimeWorker, 2: FilesystemJobQueue}
+     * @return array{0: LaunchFacade, 1: RuntimeWorker, 2: FilesystemJobQueue, 3: FilesystemRuntimeEventStore}
      */
     private function build(string $root, bool $inline): array
     {
@@ -95,12 +112,13 @@ final class MissionExecutionRuntimeTest
             new ExecutionService(new DeclarativeLocalExecutor()),
             new ValidationPipeline([new DeclarativeContextValidationStep()]),
         );
-        $queue = new FilesystemJobQueue($root . '/runtime');
+        $events = new FilesystemRuntimeEventStore($root . '/runtime');
+        $queue = new FilesystemJobQueue($root . '/runtime', $events);
         $worker = new RuntimeWorker($queue, [new MissionExecutionJobHandler($engine)], 30);
         $dispatcher = new JobDispatcher($queue, $worker, $inline);
         $launch = new LaunchFacade($missions, $engine, $dispatcher);
 
-        return [$launch, $worker, $queue];
+        return [$launch, $worker, $queue, $events];
     }
 
     private function actor(): User
@@ -143,7 +161,7 @@ final class MissionExecutionRuntimeTest
             null,
             'github',
             'org/repo',
-            ['allowedPaths' => ['src/'], 'nonGoals' => []],
+            ['allowedPaths' => ['src/'], 'nonGoals' => [], 'branch' => 'main'],
             [],
             [],
             [],

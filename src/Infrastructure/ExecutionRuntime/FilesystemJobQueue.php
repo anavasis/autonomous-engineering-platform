@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Aep\Infrastructure\ExecutionRuntime;
 
+use Aep\Application\ExecutionRuntime\Model\JobPriority;
+use Aep\Application\ExecutionRuntime\Model\RuntimeEvent;
 use Aep\Application\ExecutionRuntime\Model\RuntimeJob;
 use Aep\Application\ExecutionRuntime\Port\JobQueue;
+use Aep\Application\ExecutionRuntime\Port\NullRuntimeEventStore;
+use Aep\Application\ExecutionRuntime\Port\RuntimeEventStore;
 
 /**
  * Filesystem job queue with atomic rename claim and lease reclaim.
@@ -15,16 +19,21 @@ use Aep\Application\ExecutionRuntime\Port\JobQueue;
  *   {root}/running/{id}.json
  *   {root}/completed/{id}.json
  *   {root}/failed/{id}.json
+ *   {root}/events/{id}.jsonl
  *   {root}/index/by-run/{runId}.json
  *   {root}/locks/queue.lock
+ *
+ * Claim order: priority DESC, createdAt ASC.
  */
 final class FilesystemJobQueue implements JobQueue
 {
     private readonly string $root;
+    private readonly RuntimeEventStore $events;
 
-    public function __construct(string $root)
+    public function __construct(string $root, ?RuntimeEventStore $events = null)
     {
         $this->root = rtrim($root, "/\\");
+        $this->events = $events ?? new NullRuntimeEventStore();
         foreach ([
             $this->root,
             $this->root . '/queued',
@@ -49,6 +58,11 @@ final class FilesystemJobQueue implements JobQueue
             $path = $this->root . '/queued/' . $job->id() . '.json';
             $this->writeJob($path, $job);
             $this->indexRun($job);
+            $this->emit($job->id(), RuntimeEvent::JOB_QUEUED, $job->createdAt(), [
+                'type' => $job->type(),
+                'priority' => $job->priority(),
+                'metadata' => $job->metadata(),
+            ]);
         });
     }
 
@@ -65,10 +79,8 @@ final class FilesystemJobQueue implements JobQueue
     public function claim(string $workerId, int $leaseSeconds, string $nowUtc): ?RuntimeJob
     {
         return $this->withLock(function () use ($workerId, $leaseSeconds, $nowUtc): ?RuntimeJob {
-            $queuedDir = $this->root . '/queued';
-            $files = glob($queuedDir . '/*.json') ?: [];
-            sort($files);
-            foreach ($files as $path) {
+            $candidates = $this->listQueuedSorted();
+            foreach ($candidates as $path) {
                 $job = $this->readJob($path);
                 if ($job === null) {
                     continue;
@@ -77,41 +89,45 @@ final class FilesystemJobQueue implements JobQueue
                     continue;
                 }
                 if ($job->cancelRequested()) {
-                    $cancelled = $this->withStatus($job, RuntimeJob::STATUS_CANCELLED, $nowUtc, [
+                    $cancelled = $job->with([
+                        'status' => RuntimeJob::STATUS_CANCELLED,
+                        'updatedAt' => $nowUtc,
                         'error' => $job->cancelReason() ?? 'Cancelled.',
                         'leaseOwner' => null,
-                        'leaseExpiresAtUtc' => null,
+                        'leaseExpiresAt' => null,
+                        'cancelRequested' => true,
                     ]);
                     $this->moveAtomically($path, $this->root . '/failed/' . $job->id() . '.json', $cancelled);
+                    $this->emit($job->id(), RuntimeEvent::CANCELLED, $nowUtc, [
+                        'reason' => $cancelled->error(),
+                    ]);
 
                     continue;
                 }
 
-                $gen = $job->claimGeneration() + 1;
-                $claimed = new RuntimeJob(
-                    $job->id(),
-                    $job->type(),
-                    RuntimeJob::STATUS_RUNNING,
-                    $job->payload(),
-                    $job->attempts() + 1,
-                    $job->maxAttempts(),
-                    $job->createdAtUtc(),
-                    $nowUtc,
-                    $workerId,
-                    $this->leaseExpiry($nowUtc, $leaseSeconds),
-                    $nowUtc,
-                    null,
-                    null,
-                    $job->cancelRequested(),
-                    $job->cancelReason(),
-                    $gen,
-                    false,
-                );
+                $claimed = $job->with([
+                    'status' => RuntimeJob::STATUS_RUNNING,
+                    'attempts' => $job->attempts() + 1,
+                    'updatedAt' => $nowUtc,
+                    'leaseOwner' => $workerId,
+                    'leaseExpiresAt' => $this->leaseExpiry($nowUtc, $leaseSeconds),
+                    'lastHeartbeatAt' => $nowUtc,
+                    'result' => null,
+                    'error' => null,
+                    'claimGeneration' => $job->claimGeneration() + 1,
+                    'executed' => false,
+                ]);
                 $dest = $this->root . '/running/' . $job->id() . '.json';
                 if (!$this->moveAtomically($path, $dest, $claimed)) {
                     continue;
                 }
                 $this->indexRun($claimed);
+                $this->emit($claimed->id(), RuntimeEvent::JOB_CLAIMED, $nowUtc, [
+                    'workerId' => $workerId,
+                    'attempts' => $claimed->attempts(),
+                    'leaseExpiresAt' => $claimed->leaseExpiresAt(),
+                    'priority' => $claimed->priority(),
+                ]);
 
                 return $claimed;
             }
@@ -128,26 +144,22 @@ final class FilesystemJobQueue implements JobQueue
             if ($job === null || $job->leaseOwner() !== $workerId) {
                 return false;
             }
-            $updated = new RuntimeJob(
-                $job->id(),
-                $job->type(),
-                $job->status(),
-                $job->payload(),
-                $job->attempts(),
-                $job->maxAttempts(),
-                $job->createdAtUtc(),
-                $nowUtc,
-                $workerId,
-                $this->leaseExpiry($nowUtc, $leaseSeconds),
-                $nowUtc,
-                $job->result(),
-                $job->error(),
-                $job->cancelRequested(),
-                $job->cancelReason(),
-                $job->claimGeneration(),
-                $job->executed(),
-            );
+            $leaseExpiresAt = $this->leaseExpiry($nowUtc, $leaseSeconds);
+            $updated = $job->with([
+                'updatedAt' => $nowUtc,
+                'leaseOwner' => $workerId,
+                'leaseExpiresAt' => $leaseExpiresAt,
+                'lastHeartbeatAt' => $nowUtc,
+            ]);
             $this->writeJob($path, $updated);
+            $this->emit($jobId, RuntimeEvent::HEARTBEAT, $nowUtc, [
+                'workerId' => $workerId,
+                'leaseExpiresAt' => $leaseExpiresAt,
+            ]);
+            $this->emit($jobId, RuntimeEvent::LEASE_RENEWED, $nowUtc, [
+                'workerId' => $workerId,
+                'leaseExpiresAt' => $leaseExpiresAt,
+            ]);
 
             return true;
         });
@@ -167,27 +179,20 @@ final class FilesystemJobQueue implements JobQueue
             if ($job->executed()) {
                 return; // idempotent
             }
-            $done = new RuntimeJob(
-                $job->id(),
-                $job->type(),
-                RuntimeJob::STATUS_COMPLETED,
-                $job->payload(),
-                $job->attempts(),
-                $job->maxAttempts(),
-                $job->createdAtUtc(),
-                $nowUtc,
-                null,
-                null,
-                $job->lastHeartbeatAtUtc(),
-                $result,
-                null,
-                $job->cancelRequested(),
-                $job->cancelReason(),
-                $job->claimGeneration(),
-                true,
-            );
+            $done = $job->with([
+                'status' => RuntimeJob::STATUS_COMPLETED,
+                'updatedAt' => $nowUtc,
+                'leaseOwner' => null,
+                'leaseExpiresAt' => null,
+                'result' => $result,
+                'error' => null,
+                'executed' => true,
+            ]);
             $this->moveAtomically($path, $this->root . '/completed/' . $jobId . '.json', $done);
             $this->indexRun($done);
+            $this->emit($jobId, RuntimeEvent::COMPLETED, $nowUtc, [
+                'workerId' => $workerId,
+            ]);
         });
     }
 
@@ -207,79 +212,69 @@ final class FilesystemJobQueue implements JobQueue
             }
 
             if ($job->cancelRequested()) {
-                $cancelled = new RuntimeJob(
-                    $job->id(),
-                    $job->type(),
-                    RuntimeJob::STATUS_CANCELLED,
-                    $job->payload(),
-                    $job->attempts(),
-                    $job->maxAttempts(),
-                    $job->createdAtUtc(),
-                    $nowUtc,
-                    null,
-                    null,
-                    $job->lastHeartbeatAtUtc(),
-                    null,
-                    $error,
-                    true,
-                    $job->cancelReason() ?? $error,
-                    $job->claimGeneration(),
-                    false,
-                );
+                $cancelled = $job->with([
+                    'status' => RuntimeJob::STATUS_CANCELLED,
+                    'updatedAt' => $nowUtc,
+                    'leaseOwner' => null,
+                    'leaseExpiresAt' => null,
+                    'result' => null,
+                    'error' => $error,
+                    'cancelRequested' => true,
+                    'cancelReason' => $job->cancelReason() ?? $error,
+                    'executed' => false,
+                ]);
                 $this->moveAtomically($path, $this->root . '/failed/' . $jobId . '.json', $cancelled);
                 $this->indexRun($cancelled);
+                $this->emit($jobId, RuntimeEvent::CANCELLED, $nowUtc, [
+                    'reason' => $cancelled->cancelReason(),
+                    'workerId' => $workerId,
+                ]);
 
                 return;
             }
 
             $canRetry = $requeue && $job->attempts() < $job->maxAttempts();
             if ($canRetry) {
-                $queued = new RuntimeJob(
-                    $job->id(),
-                    $job->type(),
-                    RuntimeJob::STATUS_QUEUED,
-                    $job->payload(),
-                    $job->attempts(),
-                    $job->maxAttempts(),
-                    $job->createdAtUtc(),
-                    $nowUtc,
-                    null,
-                    null,
-                    null,
-                    null,
-                    $error,
-                    false,
-                    null,
-                    $job->claimGeneration(),
-                    false,
-                );
+                $queued = $job->with([
+                    'status' => RuntimeJob::STATUS_QUEUED,
+                    'updatedAt' => $nowUtc,
+                    'leaseOwner' => null,
+                    'leaseExpiresAt' => null,
+                    'lastHeartbeatAt' => null,
+                    'result' => null,
+                    'error' => $error,
+                    'cancelRequested' => false,
+                    'cancelReason' => null,
+                    'executed' => false,
+                ]);
                 $this->moveAtomically($path, $this->root . '/queued/' . $jobId . '.json', $queued);
                 $this->indexRun($queued);
+                $this->emit($jobId, RuntimeEvent::RETRY_SCHEDULED, $nowUtc, [
+                    'error' => $error,
+                    'attempts' => $queued->attempts(),
+                    'maxAttempts' => $queued->maxAttempts(),
+                    'workerId' => $workerId,
+                ]);
 
                 return;
             }
 
-            $failed = new RuntimeJob(
-                $job->id(),
-                $job->type(),
-                RuntimeJob::STATUS_FAILED,
-                $job->payload(),
-                $job->attempts(),
-                $job->maxAttempts(),
-                $job->createdAtUtc(),
-                $nowUtc,
-                null,
-                null,
-                $job->lastHeartbeatAtUtc(),
-                null,
-                $error,
-                $job->cancelRequested(),
-                $job->cancelReason(),
-                $job->claimGeneration(),
-                false,
-            );
+            $failed = $job->with([
+                'status' => RuntimeJob::STATUS_FAILED,
+                'updatedAt' => $nowUtc,
+                'leaseOwner' => null,
+                'leaseExpiresAt' => null,
+                'result' => null,
+                'error' => $error,
+                'executed' => false,
+            ]);
             $this->moveAtomically($path, $this->root . '/failed/' . $jobId . '.json', $failed);
             $this->indexRun($failed);
+            $this->emit($jobId, RuntimeEvent::FAILED, $nowUtc, [
+                'error' => $error,
+                'workerId' => $workerId,
+                'attempts' => $failed->attempts(),
+            ]);
         });
     }
 
@@ -294,38 +289,27 @@ final class FilesystemJobQueue implements JobQueue
             if ($job === null || $job->isTerminal()) {
                 return;
             }
-            $updated = new RuntimeJob(
-                $job->id(),
-                $job->type(),
-                $job->status(),
-                $job->payload(),
-                $job->attempts(),
-                $job->maxAttempts(),
-                $job->createdAtUtc(),
-                $nowUtc,
-                $job->leaseOwner(),
-                $job->leaseExpiresAtUtc(),
-                $job->lastHeartbeatAtUtc(),
-                $job->result(),
-                $job->error(),
-                true,
-                $reason,
-                $job->claimGeneration(),
-                $job->executed(),
-            );
+            $updated = $job->with([
+                'updatedAt' => $nowUtc,
+                'cancelRequested' => true,
+                'cancelReason' => $reason,
+            ]);
             if ($job->status() === RuntimeJob::STATUS_QUEUED) {
-                $cancelled = $this->withStatus($updated, RuntimeJob::STATUS_CANCELLED, $nowUtc, [
+                $cancelled = $updated->with([
+                    'status' => RuntimeJob::STATUS_CANCELLED,
                     'error' => $reason,
                     'leaseOwner' => null,
-                    'leaseExpiresAtUtc' => null,
+                    'leaseExpiresAt' => null,
                 ]);
                 $this->moveAtomically($found['path'], $this->root . '/failed/' . $jobId . '.json', $cancelled);
                 $this->indexRun($cancelled);
+                $this->emit($jobId, RuntimeEvent::CANCELLED, $nowUtc, ['reason' => $reason]);
 
                 return;
             }
             $this->writeJob($found['path'], $updated);
             $this->indexRun($updated);
+            // Cancel acknowledged; terminal Cancelled event emitted when worker completes cancel path.
         });
     }
 
@@ -364,56 +348,66 @@ final class FilesystemJobQueue implements JobQueue
                 if ($job->executed() || $job->isTerminal()) {
                     continue;
                 }
-                $expires = $job->leaseExpiresAtUtc();
+                $expires = $job->leaseExpiresAt();
                 if ($expires === null || strcmp($expires, $nowUtc) > 0) {
                     continue;
                 }
-                // Abandoned — never re-execute a job that already completed; only requeue if not executed.
                 if ($job->cancelRequested()) {
-                    $cancelled = $this->withStatus($job, RuntimeJob::STATUS_CANCELLED, $nowUtc, [
+                    $cancelled = $job->with([
+                        'status' => RuntimeJob::STATUS_CANCELLED,
+                        'updatedAt' => $nowUtc,
                         'error' => $job->cancelReason() ?? 'Cancelled (lease expired).',
                         'leaseOwner' => null,
-                        'leaseExpiresAtUtc' => null,
+                        'leaseExpiresAt' => null,
+                        'cancelRequested' => true,
                     ]);
                     $this->moveAtomically($path, $this->root . '/failed/' . $job->id() . '.json', $cancelled);
                     $this->indexRun($cancelled);
+                    $this->emit($job->id(), RuntimeEvent::CANCELLED, $nowUtc, [
+                        'reason' => $cancelled->error(),
+                        'reclaimed' => true,
+                    ]);
                     $count++;
 
                     continue;
                 }
                 if ($job->attempts() >= $job->maxAttempts()) {
-                    $failed = $this->withStatus($job, RuntimeJob::STATUS_FAILED, $nowUtc, [
+                    $failed = $job->with([
+                        'status' => RuntimeJob::STATUS_FAILED,
+                        'updatedAt' => $nowUtc,
                         'error' => 'Lease expired; max attempts reached.',
                         'leaseOwner' => null,
-                        'leaseExpiresAtUtc' => null,
+                        'leaseExpiresAt' => null,
                     ]);
                     $this->moveAtomically($path, $this->root . '/failed/' . $job->id() . '.json', $failed);
                     $this->indexRun($failed);
+                    $this->emit($job->id(), RuntimeEvent::FAILED, $nowUtc, [
+                        'error' => $failed->error(),
+                        'reclaimed' => true,
+                    ]);
                     $count++;
 
                     continue;
                 }
-                $queued = new RuntimeJob(
-                    $job->id(),
-                    $job->type(),
-                    RuntimeJob::STATUS_QUEUED,
-                    $job->payload(),
-                    $job->attempts(),
-                    $job->maxAttempts(),
-                    $job->createdAtUtc(),
-                    $nowUtc,
-                    null,
-                    null,
-                    null,
-                    null,
-                    'Lease expired; requeued.',
-                    false,
-                    null,
-                    $job->claimGeneration(),
-                    false,
-                );
+                $queued = $job->with([
+                    'status' => RuntimeJob::STATUS_QUEUED,
+                    'updatedAt' => $nowUtc,
+                    'leaseOwner' => null,
+                    'leaseExpiresAt' => null,
+                    'lastHeartbeatAt' => null,
+                    'result' => null,
+                    'error' => 'Lease expired; requeued.',
+                    'cancelRequested' => false,
+                    'cancelReason' => null,
+                    'executed' => false,
+                ]);
                 $this->moveAtomically($path, $this->root . '/queued/' . $job->id() . '.json', $queued);
                 $this->indexRun($queued);
+                $this->emit($job->id(), RuntimeEvent::RETRY_SCHEDULED, $nowUtc, [
+                    'reason' => 'lease_expired',
+                    'attempts' => $queued->attempts(),
+                    'maxAttempts' => $queued->maxAttempts(),
+                ]);
                 $count++;
             }
 
@@ -443,6 +437,39 @@ final class FilesystemJobQueue implements JobQueue
             flock($fh, LOCK_UN);
             fclose($fh);
         }
+    }
+
+    /** @return list<string> paths sorted by priority DESC, createdAt ASC, id ASC */
+    private function listQueuedSorted(): array
+    {
+        $queuedDir = $this->root . '/queued';
+        $files = glob($queuedDir . '/*.json') ?: [];
+        $rows = [];
+        foreach ($files as $path) {
+            $job = $this->readJob($path);
+            if ($job === null) {
+                continue;
+            }
+            $rows[] = [
+                'path' => $path,
+                'rank' => JobPriority::rank($job->priority()),
+                'createdAt' => $job->createdAt(),
+                'id' => $job->id(),
+            ];
+        }
+        usort($rows, static function (array $a, array $b): int {
+            if ($a['rank'] !== $b['rank']) {
+                return $b['rank'] <=> $a['rank']; // priority DESC
+            }
+            $created = strcmp((string) $a['createdAt'], (string) $b['createdAt']); // ASC
+            if ($created !== 0) {
+                return $created;
+            }
+
+            return strcmp((string) $a['id'], (string) $b['id']);
+        });
+
+        return array_map(static fn (array $r): string => (string) $r['path'], $rows);
     }
 
     /** @return array{dir: string, path: string}|null */
@@ -502,8 +529,14 @@ final class FilesystemJobQueue implements JobQueue
             'runId' => $runId,
             'jobId' => $job->id(),
             'status' => $job->status(),
-            'updatedAtUtc' => $job->updatedAtUtc(),
+            'updatedAt' => $job->updatedAt(),
         ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
+    }
+
+    /** @param array<string, mixed> $data */
+    private function emit(string $jobId, string $type, string $at, array $data = []): void
+    {
+        $this->events->append(RuntimeEvent::create($jobId, $type, $at, $data));
     }
 
     private function safe(string $id): string
@@ -519,31 +552,5 @@ final class FilesystemJobQueue implements JobQueue
         }
 
         return gmdate('Y-m-d\TH:i:s\Z', $ts + max(1, $leaseSeconds));
-    }
-
-    /**
-     * @param array<string, mixed> $overrides
-     */
-    private function withStatus(RuntimeJob $job, string $status, string $nowUtc, array $overrides = []): RuntimeJob
-    {
-        return new RuntimeJob(
-            $job->id(),
-            $job->type(),
-            $status,
-            $job->payload(),
-            $job->attempts(),
-            $job->maxAttempts(),
-            $job->createdAtUtc(),
-            $nowUtc,
-            array_key_exists('leaseOwner', $overrides) ? ($overrides['leaseOwner'] !== null ? (string) $overrides['leaseOwner'] : null) : $job->leaseOwner(),
-            array_key_exists('leaseExpiresAtUtc', $overrides) ? ($overrides['leaseExpiresAtUtc'] !== null ? (string) $overrides['leaseExpiresAtUtc'] : null) : $job->leaseExpiresAtUtc(),
-            $job->lastHeartbeatAtUtc(),
-            $job->result(),
-            array_key_exists('error', $overrides) ? (is_string($overrides['error']) ? $overrides['error'] : null) : $job->error(),
-            $job->cancelRequested() || $status === RuntimeJob::STATUS_CANCELLED,
-            $job->cancelReason(),
-            $job->claimGeneration(),
-            $job->executed(),
-        );
     }
 }

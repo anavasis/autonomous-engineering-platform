@@ -53,6 +53,7 @@ use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\ExecutionRuntime\Service\RuntimeCancellation;
 use Aep\Application\ExecutionRuntime\Service\RuntimeWorker;
 use Aep\Infrastructure\ExecutionRuntime\FilesystemJobQueue;
+use Aep\Infrastructure\ExecutionRuntime\FilesystemRuntimeEventStore;
 use Aep\Application\Execution\ExecutionService;
 use Aep\Application\Knowledge\Policy\KnowledgeRetrievalPolicyFactory;
 use Aep\Application\Knowledge\Service\ArchivePolicy;
@@ -459,7 +460,10 @@ final class MissionControlKernel
             $validationPipeline
         );
 
-        $jobQueue = new FilesystemJobQueue($runtimeDir);
+        $jobQueue = new FilesystemJobQueue(
+            $runtimeDir,
+            new FilesystemRuntimeEventStore($runtimeDir),
+        );
         $leaseSeconds = 60;
         $leaseEnv = getenv('AEP_RUNTIME_LEASE_SECONDS');
         if (is_string($leaseEnv) && is_numeric($leaseEnv)) {

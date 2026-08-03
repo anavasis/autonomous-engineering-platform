@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aep\Application\MissionControl\Command;
 
 use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Model\JobPriority;
 use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\ExecutionRuntime\Service\RuntimeCancellation;
 use Aep\Application\Mission\Command\ApprovalCommand;
@@ -144,12 +145,22 @@ final class MissionControlCommandFacade
             ];
         }
 
-        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
-            'action' => 'resume',
-            'runId' => $runId,
-            'attributes' => $attributes,
-            'occurredAtUtc' => Utc::now(),
-        ]);
+        $job = $this->runtime->enqueue(
+            MissionExecutionJobHandler::TYPE,
+            [
+                'action' => 'resume',
+                'runId' => $runId,
+                'attributes' => $attributes,
+                'occurredAtUtc' => Utc::now(),
+            ],
+            null,
+            JobPriority::HIGH,
+            [
+                'requestedBy' => $actor->id(),
+                'runId' => $runId,
+                'gateId' => $gateId,
+            ],
+        );
 
         return [
             'runId' => $runId,
@@ -193,16 +204,27 @@ final class MissionControlCommandFacade
             ];
         }
 
-        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
-            'action' => 'start',
-            'runId' => $runId,
-            'missionId' => $missionId,
-            'actorType' => 'user',
-            'actorId' => $actor->id(),
-            'projectId' => $projectId,
-            'attributes' => $attributes,
-            'occurredAtUtc' => Utc::now(),
-        ]);
+        $job = $this->runtime->enqueue(
+            MissionExecutionJobHandler::TYPE,
+            [
+                'action' => 'start',
+                'runId' => $runId,
+                'missionId' => $missionId,
+                'actorType' => 'user',
+                'actorId' => $actor->id(),
+                'projectId' => $projectId,
+                'attributes' => $attributes,
+                'occurredAtUtc' => Utc::now(),
+            ],
+            null,
+            JobPriority::NORMAL,
+            array_filter([
+                'requestedBy' => $actor->id(),
+                'runId' => $runId,
+                'missionId' => $missionId,
+                'projectId' => $projectId,
+            ], static fn ($v) => $v !== null && $v !== ''),
+        );
 
         return [
             'runId' => $runId,

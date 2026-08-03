@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aep\Application\MissionExecution\Service;
 
 use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Model\JobPriority;
 use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\Mission\Command\CreateMission;
 use Aep\Application\Mission\Command\DefineScope;
@@ -84,6 +85,8 @@ final class LaunchFacade
         $attributes['planId'] = $plan->id();
         $attributes['confirmedBy'] = $actor->id();
 
+        $branch = $params['branch'] ?? ($attributes['branch'] ?? null);
+
         return $this->dispatchStart(
             $runId,
             $missionId,
@@ -91,6 +94,14 @@ final class LaunchFacade
             $actor->id(),
             $attributes,
             $plan->projectId(),
+            array_filter([
+                'provider' => $provider,
+                'repository' => $repository,
+                'branch' => is_string($branch) ? $branch : null,
+                'requestedBy' => $actor->id(),
+                'planId' => $plan->id(),
+                'projectId' => $plan->projectId(),
+            ], static fn ($v) => $v !== null && $v !== ''),
         );
     }
 
@@ -111,6 +122,11 @@ final class LaunchFacade
             $actor->id(),
             $attributes,
             $projectId,
+            [
+                'requestedBy' => $actor->id(),
+                'projectId' => $projectId,
+                'retry' => true,
+            ],
         );
     }
 
@@ -131,12 +147,21 @@ final class LaunchFacade
             ];
         }
 
-        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
-            'action' => 'resume',
-            'runId' => $runId,
-            'attributes' => $attributes,
-            'occurredAtUtc' => Utc::now(),
-        ]);
+        $job = $this->runtime->enqueue(
+            MissionExecutionJobHandler::TYPE,
+            [
+                'action' => 'resume',
+                'runId' => $runId,
+                'attributes' => $attributes,
+                'occurredAtUtc' => Utc::now(),
+            ],
+            null,
+            JobPriority::HIGH,
+            [
+                'requestedBy' => is_string($attributes['requestedBy'] ?? null) ? $attributes['requestedBy'] : 'system',
+                'runId' => $runId,
+            ],
+        );
 
         return [
             'runId' => $runId,
@@ -149,6 +174,7 @@ final class LaunchFacade
 
     /**
      * @param array<string, mixed> $attributes
+     * @param array<string, mixed> $metadata
      * @return array{missionId: string, runId: string, engineState: string, message: string, jobId?: string}
      */
     private function dispatchStart(
@@ -158,6 +184,7 @@ final class LaunchFacade
         string $actorId,
         array $attributes,
         ?string $projectId,
+        array $metadata = [],
     ): array {
         if ($this->runtime === null) {
             $result = $this->engine->start(new MissionEngineRequest(
@@ -178,16 +205,27 @@ final class LaunchFacade
             ];
         }
 
-        $job = $this->runtime->enqueue(MissionExecutionJobHandler::TYPE, [
-            'action' => 'start',
-            'runId' => $runId,
-            'missionId' => $missionId,
-            'actorType' => $actorType,
-            'actorId' => $actorId,
-            'projectId' => $projectId,
-            'attributes' => $attributes,
-            'occurredAtUtc' => Utc::now(),
-        ]);
+        $meta = $metadata;
+        $meta['runId'] = $runId;
+        $meta['missionId'] = $missionId;
+        $meta['requestedBy'] = $meta['requestedBy'] ?? $actorId;
+
+        $job = $this->runtime->enqueue(
+            MissionExecutionJobHandler::TYPE,
+            [
+                'action' => 'start',
+                'runId' => $runId,
+                'missionId' => $missionId,
+                'actorType' => $actorType,
+                'actorId' => $actorId,
+                'projectId' => $projectId,
+                'attributes' => $attributes,
+                'occurredAtUtc' => Utc::now(),
+            ],
+            null,
+            JobPriority::NORMAL,
+            $meta,
+        );
 
         return [
             'missionId' => $missionId,
