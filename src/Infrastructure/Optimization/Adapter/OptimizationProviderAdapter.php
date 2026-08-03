@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 namespace Aep\Infrastructure\Optimization\Adapter;
 
 use Aep\Application\Execution\ExecutionRequest;
@@ -9,20 +11,28 @@ use Aep\Application\Optimization\Port\OptimizationSettingsStore;
 use Aep\Application\Optimization\Service\OptimizationEngine;
 
 /**
- * Decorates Executor: scores/selects providerId before ProviderRoutingExecutor.
- * Does not modify EngineeringExecutionProvider contracts.
+ * Transparent Executor decorator: scores/selects providerId before the inner executor
+ * (typically ProviderRoutingExecutor). Does not advertise a separate executor identity
+ * and does not rewrite ExecutionResult.executorId.
  */
 final class OptimizationProviderAdapter implements Executor
 {
+    /**
+     * @deprecated Historical constant — identity is delegated to the wrapped executor.
+     */
     public const ID = 'optimization_provider';
 
     public function __construct(
         private readonly Executor $inner,
         private readonly OptimizationEngine $engine,
         private readonly OptimizationSettingsStore $settings,
-    ) {}
+    ) {
+    }
 
-    public function id(): string { return self::ID; }
+    public function id(): string
+    {
+        return $this->inner->id();
+    }
 
     public function execute(ExecutionRequest $request): ExecutionResult
     {
