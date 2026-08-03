@@ -202,6 +202,62 @@ final class HttpKernelSmokeTest
         Assert::true(!str_contains($compose, 'GEMINI_API_KEY'));
     }
 
+    public function test_dockerfile_pins_and_verifies_codex_musl_binary(): void
+    {
+        $repo = dirname(__DIR__, 3);
+        $dockerfile = (string) file_get_contents($repo . '/deploy/Dockerfile.api');
+
+        Assert::true(str_contains($dockerfile, 'CODEX_VERSION=0.145.0'));
+        Assert::true(str_contains($dockerfile, 'codex-x86_64-unknown-linux-musl.tar.gz'));
+        Assert::true(str_contains($dockerfile, 'CODEX_SHA256='));
+        Assert::true(str_contains($dockerfile, 'sha256sum -c'));
+        Assert::true(str_contains($dockerfile, '/usr/local/bin/codex'));
+        Assert::true(str_contains($dockerfile, 'codex --version'));
+        Assert::true(!str_contains($dockerfile, 'npm install'));
+        Assert::true(!str_contains($dockerfile, 'nodejs'));
+        Assert::true(!preg_match('/curl\s+[^\n]*\|\s*sh/', $dockerfile));
+        Assert::true(!str_contains($dockerfile, 'OPENAI_API_KEY'));
+        Assert::true(!str_contains($dockerfile, 'CODEX_API_KEY'));
+        Assert::true(!str_contains($dockerfile, 'auth.json'));
+        Assert::true(!str_contains($dockerfile, '.codex'));
+    }
+
+    public function test_compose_worker_has_persistent_codex_home_not_on_proxy(): void
+    {
+        $repo = dirname(__DIR__, 3);
+        $compose = (string) file_get_contents($repo . '/deploy/docker-compose.yml');
+        $envExample = (string) file_get_contents($repo . '/deploy/.env.example');
+
+        Assert::true(str_contains($compose, 'HOME: /var/aep/codex-home'));
+        Assert::true(str_contains($compose, 'codex_home:/var/aep/codex-home'));
+        Assert::true(preg_match('/^  codex_home:\s*$/m', $compose) === 1);
+
+        // Proxy block must not reference Codex credentials volume.
+        if (preg_match('/^  proxy:\n(.*?)^  api:/ms', $compose, $m) === 1) {
+            Assert::true(!str_contains($m[1], 'codex_home'));
+            Assert::true(!str_contains($m[1], 'codex-home'));
+        } else {
+            Assert::true(false, 'Unable to isolate proxy service block.');
+        }
+
+        // API does not need credential mount for binary health.
+        if (preg_match('/^  api:\n(.*?)^  worker:/ms', $compose, $m) === 1) {
+            Assert::true(!str_contains($m[1], 'codex_home:'));
+            Assert::true(!str_contains($m[1], 'HOME: /var/aep/codex-home'));
+        } else {
+            Assert::true(false, 'Unable to isolate api service block.');
+        }
+
+        Assert::true(str_contains($envExample, '/var/aep/codex-home'));
+        Assert::true(str_contains($envExample, 'docker compose run'));
+        Assert::true(str_contains($envExample, 'never be committed') || str_contains($envExample, 'must never be committed'));
+
+        $catalog = json_decode((string) file_get_contents($repo . '/deploy/execution-providers.json'), true);
+        Assert::true(is_array($catalog));
+        $ids = array_map(static fn (array $p): string => (string) ($p['id'] ?? ''), $catalog['providers'] ?? []);
+        Assert::true(in_array('codex', $ids, true));
+    }
+
     public function test_execution_providers_catalog_lists_cli_providers_even_when_unavailable(): void
     {
         require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';
