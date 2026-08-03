@@ -184,6 +184,102 @@ final class HttpKernelSmokeTest
         Assert::true(str_contains($envExample, 'VERSION file is canonical') || str_contains($envExample, 'canonical'));
     }
 
+    public function test_compose_mounts_execution_providers_catalog_for_api_and_worker(): void
+    {
+        $repo = dirname(__DIR__, 3);
+        $compose = (string) file_get_contents($repo . '/deploy/docker-compose.yml');
+        $envExample = (string) file_get_contents($repo . '/deploy/.env.example');
+
+        $mount = './execution-providers.json:/var/www/aep/deploy/execution-providers.json:ro';
+        $envLine = 'AEP_EXECUTION_PROVIDERS_CONFIG: /var/www/aep/deploy/execution-providers.json';
+        Assert::true(substr_count($compose, $mount) === 2);
+        Assert::true(substr_count($compose, $envLine) === 2);
+        Assert::true(str_contains($envExample, 'AEP_EXECUTION_PROVIDERS_CONFIG=/var/www/aep/deploy/execution-providers.json'));
+        Assert::true(str_contains($envExample, 'not a secret') || str_contains($envExample, 'not a secret'));
+        Assert::true(!str_contains($compose, 'OPENAI_API_KEY'));
+        Assert::true(!str_contains($compose, 'CODEX_API_KEY'));
+        Assert::true(!str_contains($compose, 'ANTHROPIC_API_KEY'));
+        Assert::true(!str_contains($compose, 'GEMINI_API_KEY'));
+    }
+
+    public function test_execution_providers_catalog_lists_cli_providers_even_when_unavailable(): void
+    {
+        require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';
+
+        $repo = dirname(__DIR__, 3);
+        $catalog = $repo . '/deploy/execution-providers.json';
+        Assert::true(is_file($catalog));
+
+        $root = sys_get_temp_dir() . '/aep_mc_providers_' . bin2hex(random_bytes(4));
+        $prevConfig = getenv('AEP_EXECUTION_PROVIDERS_CONFIG');
+        putenv('AEP_EXECUTION_PROVIDERS_CONFIG=' . $catalog);
+        putenv('AEP_BOOTSTRAP_ADMIN_USERNAME=admin');
+        putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD=providers-secret');
+
+        try {
+            $kernel = new MissionControlKernel($root, '1.7.5');
+            $listed = $kernel->execution()->listProviders();
+            $ids = array_map(static fn (array $p): string => (string) ($p['id'] ?? ''), $listed);
+            foreach (['local-agent', 'cursor', 'claude-code', 'codex', 'gemini-cli', 'legacy-local'] as $expectedId) {
+                Assert::true(in_array($expectedId, $ids, true), 'missing provider id: ' . $expectedId);
+            }
+
+            $byId = [];
+            foreach ($listed as $item) {
+                $byId[(string) $item['id']] = $item;
+            }
+            foreach (['cursor', 'claude-code', 'codex', 'gemini-cli'] as $cliId) {
+                Assert::true(isset($byId[$cliId]));
+                $health = $byId[$cliId]['health'] ?? null;
+                Assert::true(is_array($health));
+                // Binaries are not installed in CI — must still be listed (no health filter).
+                Assert::true(in_array((string) ($health['status'] ?? ''), ['ok', 'degraded', 'unavailable'], true));
+            }
+
+            $login = $kernel->auth()->login('admin', 'providers-secret', Utc::now());
+            $sid = $login['session']->sessionId();
+            $http = new HttpKernel($kernel);
+
+            $_SERVER['REQUEST_METHOD'] = 'GET';
+            $_SERVER['REQUEST_URI'] = '/api/v1/execution/providers';
+            $_COOKIE = ['aep_session' => $sid];
+            ob_start();
+            $http->handle();
+            $providersBody = json_decode((string) ob_get_clean(), true);
+            Assert::true(is_array($providersBody));
+            $httpIds = array_map(
+                static fn (array $p): string => (string) ($p['id'] ?? ''),
+                is_array($providersBody['items'] ?? null) ? $providersBody['items'] : []
+            );
+            foreach (['cursor', 'claude-code', 'codex', 'gemini-cli'] as $expectedId) {
+                Assert::true(in_array($expectedId, $httpIds, true));
+            }
+
+            $_SERVER['REQUEST_URI'] = '/api/v1/settings/execution';
+            ob_start();
+            $http->handle();
+            $settingsBody = json_decode((string) ob_get_clean(), true);
+            Assert::true(is_array($settingsBody));
+            $settingsProviders = is_array($settingsBody['providers'] ?? null) ? $settingsBody['providers'] : [];
+            $settingsIds = array_map(static fn (array $p): string => (string) ($p['id'] ?? ''), $settingsProviders);
+            foreach (['cursor', 'claude-code', 'codex', 'gemini-cli'] as $expectedId) {
+                Assert::true(in_array($expectedId, $settingsIds, true));
+            }
+            $default = $settingsBody['settings']['defaultProviderId'] ?? null;
+            Assert::true($default === null || $default === '');
+        } finally {
+            if ($prevConfig === false) {
+                putenv('AEP_EXECUTION_PROVIDERS_CONFIG');
+            } else {
+                putenv('AEP_EXECUTION_PROVIDERS_CONFIG=' . $prevConfig);
+            }
+            putenv('AEP_BOOTSTRAP_ADMIN_USERNAME');
+            putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD');
+            $_COOKIE = [];
+            $this->removeDir($root);
+        }
+    }
+
     public function test_me_requires_auth(): void
     {
         require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';

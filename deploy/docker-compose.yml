@@ -22,6 +22,7 @@ services:
       AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
       AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
       AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
+      AEP_EXECUTION_PROVIDERS_CONFIG: /var/www/aep/deploy/execution-providers.json
       AEP_BOOTSTRAP_ADMIN_USERNAME: ${AEP_BOOTSTRAP_ADMIN_USERNAME:-admin}
       AEP_BOOTSTRAP_ADMIN_PASSWORD: ${AEP_BOOTSTRAP_ADMIN_PASSWORD:-changeme}
       AEP_BOOTSTRAP_ADMIN_DISPLAY: ${AEP_BOOTSTRAP_ADMIN_DISPLAY:-AEP Administrator}
@@ -31,6 +32,7 @@ services:
       - ./agents.json:/var/aep/deploy/agents.json:ro
       - ./optimization.json:/var/aep/deploy/optimization.json:ro
       - ./governance.json:/var/aep/deploy/governance.json:ro
+      - ./execution-providers.json:/var/www/aep/deploy/execution-providers.json:ro
     expose:
       - "8080"
 
@@ -47,6 +49,7 @@ services:
       AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
       AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
       AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
+      AEP_EXECUTION_PROVIDERS_CONFIG: /var/www/aep/deploy/execution-providers.json
       AEP_BOOTSTRAP_ADMIN_USERNAME: ${AEP_BOOTSTRAP_ADMIN_USERNAME:-admin}
       AEP_BOOTSTRAP_ADMIN_PASSWORD: ${AEP_BOOTSTRAP_ADMIN_PASSWORD:-changeme}
       AEP_BOOTSTRAP_ADMIN_DISPLAY: ${AEP_BOOTSTRAP_ADMIN_DISPLAY:-AEP Administrator}
@@ -57,6 +60,7 @@ services:
       - ./agents.json:/var/aep/deploy/agents.json:ro
       - ./optimization.json:/var/aep/deploy/optimization.json:ro
       - ./governance.json:/var/aep/deploy/governance.json:ro
+      - ./execution-providers.json:/var/www/aep/deploy/execution-providers.json:ro
 
 volumes:
   aep_data:
