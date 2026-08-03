@@ -17,7 +17,8 @@ services:
     restart: unless-stopped
     environment:
       AEP_DATA_ROOT: /var/aep/data
-      AEP_VERSION: "1.7.0"
+      # Optional override only; leave unset so the image VERSION file is used.
+      AEP_VERSION: ${AEP_VERSION:-}
       AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
       AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
       AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
@@ -41,7 +42,8 @@ services:
     command: ["php", "bin/execution-worker.php"]
     environment:
       AEP_DATA_ROOT: /var/aep/data
-      AEP_VERSION: "1.7.0"
+      # Optional override only; leave unset so the image VERSION file is used.
+      AEP_VERSION: ${AEP_VERSION:-}
       AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
       AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
       AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
