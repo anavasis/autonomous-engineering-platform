@@ -110,14 +110,17 @@ final class EngineeringWorkspaceService
                 'AEP_ALLOWED_PATHS',
             ]);
 
-            if ($this->git !== null && $projectId !== null && $projectId !== '' && ($gitSpec['repository'] ?? '') !== '') {
+            $repository = is_string($gitSpec['repository'] ?? null) ? trim((string) $gitSpec['repository']) : '';
+            if ($this->git !== null && $repository !== '') {
+                $cacheProjectId = $this->resolveGitCacheProjectId($projectId, $gitSpec);
                 $gitMeta = $this->git->materialize($ws, array_merge($gitSpec, [
-                    'projectId' => $projectId,
+                    'projectId' => $cacheProjectId,
                 ]));
                 $ws->setGit($gitMeta);
                 $this->event($id, 'git.materialized', [
                     'branch' => $gitMeta['branch'] ?? null,
                     'mode' => $gitMeta['mode'] ?? null,
+                    'cacheProjectId' => $cacheProjectId,
                 ]);
             } else {
                 $ws->setGit(['mode' => 'mounts_only', 'branch' => null, 'headSha' => null]);
@@ -516,5 +519,27 @@ final class EngineeringWorkspaceService
         }
 
         return (int) floor(($now->getTimestamp() - $from->getTimestamp()) / 86400);
+    }
+
+    /**
+     * Resolve a filesystem-safe cache identity for git materialization.
+     * Project-bound missions keep their projectId; unbound missions use a
+     * deterministic non-secret hash so owner/repository never appear in paths.
+     *
+     * @param array<string, mixed> $gitSpec
+     */
+    private function resolveGitCacheProjectId(?string $projectId, array $gitSpec): string
+    {
+        if (is_string($projectId) && trim($projectId) !== '') {
+            return trim($projectId);
+        }
+
+        $provider = is_string($gitSpec['provider'] ?? null) ? strtolower(trim((string) $gitSpec['provider'])) : 'github';
+        $repository = is_string($gitSpec['repository'] ?? null) ? trim((string) $gitSpec['repository']) : '';
+        if ($provider === '' || $repository === '') {
+            throw new \InvalidArgumentException('git.provider and git.repository are required when projectId is absent.');
+        }
+
+        return 'repo_' . hash('sha256', $provider . ':' . $repository);
     }
 }
