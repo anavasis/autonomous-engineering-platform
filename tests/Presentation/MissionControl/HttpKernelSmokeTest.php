@@ -45,6 +45,145 @@ final class HttpKernelSmokeTest
         putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD');
     }
 
+    public function test_runtime_version_env_wins_over_version_file(): void
+    {
+        $this->loadVersionResolver();
+
+        $tmp = sys_get_temp_dir() . '/aep_ver_' . bin2hex(random_bytes(4));
+        mkdir($tmp, 0775, true);
+        file_put_contents($tmp . '/VERSION', "9.9.9\n");
+
+        $prev = getenv('AEP_VERSION');
+        putenv('AEP_VERSION=2.0.0-override');
+        try {
+            Assert::same('2.0.0-override', aep_resolve_runtime_version($tmp));
+        } finally {
+            $this->restoreAepVersion($prev);
+            $this->removeDir($tmp);
+        }
+    }
+
+    public function test_runtime_version_reads_version_file_when_env_absent_or_empty(): void
+    {
+        $this->loadVersionResolver();
+
+        $tmp = sys_get_temp_dir() . '/aep_ver_' . bin2hex(random_bytes(4));
+        mkdir($tmp, 0775, true);
+        file_put_contents($tmp . '/VERSION', "1.7.4\n");
+
+        $prev = getenv('AEP_VERSION');
+        try {
+            putenv('AEP_VERSION');
+            Assert::same('1.7.4', aep_resolve_runtime_version($tmp));
+
+            putenv('AEP_VERSION=');
+            Assert::same('1.7.4', aep_resolve_runtime_version($tmp));
+
+            putenv('AEP_VERSION=   ');
+            Assert::same('1.7.4', aep_resolve_runtime_version($tmp));
+        } finally {
+            $this->restoreAepVersion($prev);
+            $this->removeDir($tmp);
+        }
+    }
+
+    public function test_runtime_version_fallback_when_no_env_or_file(): void
+    {
+        $this->loadVersionResolver();
+
+        $tmp = sys_get_temp_dir() . '/aep_ver_' . bin2hex(random_bytes(4));
+        mkdir($tmp, 0775, true);
+
+        $prev = getenv('AEP_VERSION');
+        putenv('AEP_VERSION');
+        try {
+            Assert::same('0.0.0', aep_resolve_runtime_version($tmp));
+        } finally {
+            $this->restoreAepVersion($prev);
+            $this->removeDir($tmp);
+        }
+    }
+
+    public function test_api_health_reports_resolved_version_from_resolver(): void
+    {
+        require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';
+        $this->loadVersionResolver();
+
+        $tmp = sys_get_temp_dir() . '/aep_ver_health_' . bin2hex(random_bytes(4));
+        mkdir($tmp, 0775, true);
+        file_put_contents($tmp . '/VERSION', "1.7.4\n");
+
+        $prev = getenv('AEP_VERSION');
+        putenv('AEP_VERSION');
+        putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD=http-secret');
+
+        try {
+            $resolved = aep_resolve_runtime_version($tmp);
+            Assert::same('1.7.4', $resolved);
+
+            $dataRoot = $tmp . '/data';
+            $kernel = new MissionControlKernel($dataRoot, $resolved);
+            $http = new HttpKernel($kernel);
+
+            $_SERVER['REQUEST_METHOD'] = 'GET';
+            $_SERVER['REQUEST_URI'] = '/api/v1/health';
+            $_COOKIE = [];
+
+            ob_start();
+            $http->handle();
+            $raw = ob_get_clean();
+            $data = json_decode((string) $raw, true);
+            Assert::true(is_array($data));
+            Assert::same('1.7.4', $data['version'] ?? null);
+        } finally {
+            $this->restoreAepVersion($prev);
+            putenv('AEP_BOOTSTRAP_ADMIN_PASSWORD');
+            $this->removeDir($tmp);
+            $_COOKIE = [];
+        }
+    }
+
+    public function test_worker_uses_same_version_resolution_as_api(): void
+    {
+        $this->loadVersionResolver();
+        // Loading the worker entrypoint must reuse the same resolver (function_exists guard).
+        if (!defined('AEP_TEST_RESOLVER_ONLY')) {
+            define('AEP_TEST_RESOLVER_ONLY', true);
+        }
+        require_once dirname(__DIR__, 3) . '/bin/execution-worker.php';
+
+        $tmp = sys_get_temp_dir() . '/aep_ver_worker_' . bin2hex(random_bytes(4));
+        mkdir($tmp, 0775, true);
+        file_put_contents($tmp . '/VERSION', "3.1.4\n");
+
+        $prev = getenv('AEP_VERSION');
+        try {
+            putenv('AEP_VERSION=worker-env-wins');
+            Assert::same('worker-env-wins', aep_resolve_runtime_version($tmp));
+
+            putenv('AEP_VERSION');
+            Assert::same('3.1.4', aep_resolve_runtime_version($tmp));
+        } finally {
+            $this->restoreAepVersion($prev);
+            $this->removeDir($tmp);
+        }
+    }
+
+    public function test_deploy_files_do_not_hardcode_release_version(): void
+    {
+        $repo = dirname(__DIR__, 3);
+        $compose = (string) file_get_contents($repo . '/deploy/docker-compose.yml');
+        $dockerfile = (string) file_get_contents($repo . '/deploy/Dockerfile.api');
+        $envExample = (string) file_get_contents($repo . '/deploy/.env.example');
+
+        Assert::true(!preg_match('/AEP_VERSION:\s*"\d+\.\d+\.\d+"/', $compose));
+        Assert::true(!preg_match('/^ENV\s+AEP_VERSION=/m', $dockerfile));
+        Assert::true(str_contains($dockerfile, 'COPY VERSION ./VERSION'));
+        Assert::true(str_contains($compose, 'AEP_VERSION: ${AEP_VERSION:-}'));
+        Assert::true(!preg_match('/^AEP_VERSION=\d+\.\d+\.\d+\s*$/m', $envExample));
+        Assert::true(str_contains($envExample, 'VERSION file is canonical') || str_contains($envExample, 'canonical'));
+    }
+
     public function test_me_requires_auth(): void
     {
         require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';
@@ -131,6 +270,24 @@ final class HttpKernelSmokeTest
         putenv('AEP_SSE_ENABLED');
         unset($_SERVER['HTTP_LAST_EVENT_ID']);
         $_COOKIE = [];
+    }
+
+    private function loadVersionResolver(): void
+    {
+        if (!defined('AEP_TEST_RESOLVER_ONLY')) {
+            define('AEP_TEST_RESOLVER_ONLY', true);
+        }
+        require_once dirname(__DIR__, 3) . '/apps/mission-control-api/public/index.php';
+        Assert::true(function_exists('aep_resolve_runtime_version'));
+    }
+
+    private function restoreAepVersion(string|false $prev): void
+    {
+        if ($prev === false) {
+            putenv('AEP_VERSION');
+        } else {
+            putenv('AEP_VERSION=' . $prev);
+        }
     }
 
     private function removeDir(string $dir): void

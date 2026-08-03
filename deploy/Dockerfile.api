@@ -14,7 +14,6 @@ RUN mkdir -p /var/aep/data \
   && chmod +x bin/execution-worker.php
 
 ENV AEP_DATA_ROOT=/var/aep/data
-ENV AEP_VERSION=1.7.0
 
 USER www-data
 EXPOSE 8080
