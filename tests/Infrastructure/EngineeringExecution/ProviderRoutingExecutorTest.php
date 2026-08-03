@@ -12,6 +12,7 @@ use Aep\Application\EngineeringExecution\Service\PromptPipeline;
 use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
 use Aep\Application\Execution\ExecutionRequest;
 use Aep\Application\Execution\ExecutionService;
+use Aep\Infrastructure\EngineeringExecution\Provider\ClaudeCodeCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\CursorCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\ExternalCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
@@ -85,9 +86,13 @@ final class ProviderRoutingExecutorTest
             Assert::same('Cursor Agent', $registry->get('cursor')->displayName());
             Assert::true($registry->get('cursor') instanceof CursorCliProvider);
             Assert::true($registry->get('cursor') instanceof ExternalCliProvider);
+            Assert::true($registry->get('claude-code') instanceof ClaudeCodeCliProvider);
+            Assert::true($registry->get('claude-code') instanceof ExternalCliProvider);
             $health = $registry->get('cursor')->health();
             Assert::true($health->isAvailable());
+            Assert::true($registry->get('claude-code')->health()->isAvailable());
             Assert::same('degraded', $registry->get('codex')->health()->status());
+            Assert::same('degraded', $registry->get('gemini-cli')->health()->status());
 
             $ext = new ConfigProviderRegistry([
                 'providers' => [
@@ -144,6 +149,15 @@ final class ProviderRoutingExecutorTest
         $suite->test_cursor_provider_is_thin_external_subclass();
     }
 
+    public function test_claude_code_cli_provider_suite(): void
+    {
+        require_once __DIR__ . '/ClaudeCodeCliProviderTest.php';
+        $suite = new ClaudeCodeCliProviderTest();
+        $suite->test_health_unavailable_when_binary_missing();
+        $suite->test_run_uses_print_flag_and_prompt_argv();
+        $suite->test_json_args_remain_configurable();
+    }
+
     private function router(string $root, ?JsonExecutionSettingsStore $settings = null): ProviderRoutingExecutor
     {
         $executionDir = $root . '/execution';
@@ -169,10 +183,13 @@ final class ProviderRoutingExecutorTest
     private function registry(?string $cursorBinary = null): ConfigProviderRegistry
     {
         $cursorOptions = ['simulate' => false, 'useRepoCwd' => false];
+        $claudeOptions = ['simulate' => false, 'useRepoCwd' => false, 'promptViaStdin' => false, 'args' => ['-p']];
         if (is_string($cursorBinary) && $cursorBinary !== '') {
             $cursorOptions['binary'] = $cursorBinary;
+            $claudeOptions['binary'] = $cursorBinary;
         } else {
             $cursorOptions['binary'] = '/tmp/aep-cursor-missing-' . bin2hex(random_bytes(3));
+            $claudeOptions['binary'] = '/tmp/aep-claude-missing-' . bin2hex(random_bytes(3));
         }
 
         return new ConfigProviderRegistry([
@@ -180,13 +197,15 @@ final class ProviderRoutingExecutorTest
                 ['id' => 'local-agent', 'type' => 'local-agent', 'enabled' => true],
                 ['id' => 'cursor', 'type' => 'cursor-cli', 'enabled' => true, 'displayName' => 'Cursor Agent', 'options' => $cursorOptions],
                 ['id' => 'codex', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'OpenAI Codex', 'options' => ['simulate' => true]],
-                ['id' => 'claude-code', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'Claude Code', 'options' => ['simulate' => true]],
+                ['id' => 'claude-code', 'type' => 'claude-code-cli', 'enabled' => true, 'displayName' => 'Claude Code', 'options' => $claudeOptions],
                 ['id' => 'gemini-cli', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'Gemini CLI', 'options' => ['simulate' => true]],
             ],
         ], [
             'local-agent' => static fn (array $o): LocalAgentProvider => new LocalAgentProvider($o),
             'stub-cli' => static fn (array $o): StubCliProvider => new StubCliProvider($o),
             'cursor-cli' => static fn (array $o): CursorCliProvider => new CursorCliProvider($o),
+            'claude-code-cli' => static fn (array $o): ClaudeCodeCliProvider => new ClaudeCodeCliProvider($o),
+            'external-cli' => static fn (array $o): ExternalCliProvider => new ExternalCliProvider($o),
         ]);
     }
 
