@@ -17,7 +17,7 @@
     "backend/",
     "frontend/",
     "reports/tests.xml",
-    "reports/build.log"
+    "reports/build.txt"
   ],
   "validationRules": [
     {
@@ -78,7 +78,7 @@
     {
       "id": "file_sqlite_schema",
       "type": "file_exists",
-      "params": { "path": "backend/db/schema.sql" }
+      "params": { "path": "backend/db/schema.ddl" }
     },
     {
       "id": "file_notes_api",

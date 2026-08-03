@@ -464,7 +464,9 @@ final class AcceptanceRunner
             if (is_file($root . '/.aep/tests-passed') || is_file($root . '/reports/tests.xml')) {
                 $signals['tests_executed'] = true;
             }
-            if (is_file($root . '/.aep/build-ok') || is_file($root . '/reports/build.log')) {
+            if (is_file($root . '/.aep/build-ok')
+                || is_file($root . '/reports/build.log')
+                || is_file($root . '/reports/build.txt')) {
                 $signals['build_completed'] = true;
             }
         }
