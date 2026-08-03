@@ -46,6 +46,8 @@ services:
       AEP_DATA_ROOT: /var/aep/data
       # Optional override only; leave unset so the image VERSION file is used.
       AEP_VERSION: ${AEP_VERSION:-}
+      # Persistent Codex CLI home (Sign in with ChatGPT credentials under ~/.codex).
+      HOME: /var/aep/codex-home
       AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
       AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
       AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
@@ -57,6 +59,7 @@ services:
       AEP_RUNTIME_WORKER_ID: ${AEP_RUNTIME_WORKER_ID:-worker-1}
     volumes:
       - aep_data:/var/aep/data
+      - codex_home:/var/aep/codex-home
       - ./agents.json:/var/aep/deploy/agents.json:ro
       - ./optimization.json:/var/aep/deploy/optimization.json:ro
       - ./governance.json:/var/aep/deploy/governance.json:ro
@@ -64,3 +67,4 @@ services:
 
 volumes:
   aep_data:
+  codex_home:
