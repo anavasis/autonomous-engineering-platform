@@ -1,23 +1,24 @@
 {
   "name": "hello-notes",
-  "description": "End-to-end acceptance project: Dockerized notes app with backend, frontend, SQLite, CRUD, search, README, and tests.",
+  "description": "Real autonomous engineering project: REST notes app with SQLite, CRUD, search, Docker, README, and unit tests — generated through AEP Runtime + Engineering Execution.",
   "requirements": [
-    "Docker-based local development and run story",
-    "Backend API service",
+    "REST backend",
     "Frontend UI",
-    "SQLite persistence",
-    "CRUD Notes (create, read, update, delete)",
-    "Search notes",
-    "README with setup and usage",
-    "Automated tests"
+    "SQLite",
+    "CRUD Notes",
+    "Search",
+    "Docker support",
+    "README",
+    "Unit tests"
   ],
   "expectedArtifacts": [
     "README.md",
+    "Dockerfile",
     "docker-compose.yml",
     "backend/",
     "frontend/",
-    "reports/tests.xml",
-    "reports/build.txt"
+    "backend/db/schema.ddl",
+    "backend/tests/NotesTest.php"
   ],
   "validationRules": [
     {
@@ -47,74 +48,66 @@
       "description": "Runtime execution succeeded without engine failure"
     },
     {
-      "id": "artifact_generated",
-      "type": "artifact_generated",
-      "params": {
-        "minCount": 0
-      },
-      "description": "Artifact collection observed (min 0 for platform smoke; raise when providers emit workspace artifacts)"
+      "id": "workspace_created",
+      "type": "directory_exists",
+      "params": { "path": "." },
+      "description": "Evaluation workspace root exists"
     },
     {
-      "id": "file_readme",
+      "id": "files_generated",
       "type": "file_exists",
       "params": { "path": "README.md" },
-      "description": "README present in evaluation workspace"
+      "description": "Generated files present (README as generation marker)"
     },
     {
-      "id": "file_compose",
+      "id": "readme_exists",
       "type": "file_exists",
-      "params": { "path": "docker-compose.yml" }
+      "params": { "path": "README.md" }
     },
     {
-      "id": "dir_backend",
+      "id": "docker_compose_exists",
+      "type": "file_exists",
+      "params": { "path": "docker-compose.yml" },
+      "description": "Docker Compose present (shared by reference + generated workspaces)"
+    },
+    {
+      "id": "backend_exists",
       "type": "directory_exists",
       "params": { "path": "backend" }
     },
     {
-      "id": "dir_frontend",
+      "id": "frontend_exists",
       "type": "directory_exists",
       "params": { "path": "frontend" }
     },
     {
-      "id": "file_sqlite_schema",
+      "id": "sqlite_config_exists",
       "type": "file_exists",
       "params": { "path": "backend/db/schema.ddl" }
     },
     {
-      "id": "file_notes_api",
+      "id": "tests_exist",
       "type": "file_exists",
-      "params": { "path": "backend/src/notes.php" }
-    },
-    {
-      "id": "file_search",
-      "type": "file_exists",
-      "params": { "path": "backend/src/search.php" }
-    },
-    {
-      "id": "file_frontend_app",
-      "type": "file_exists",
-      "params": { "path": "frontend/src/App.tsx" }
+      "params": { "path": "backend/tests/NotesTest.php" }
     },
     {
       "id": "tests_executed",
-      "type": "tests_executed",
-      "description": "Tests executed signal observed"
+      "type": "tests_executed"
     },
     {
       "id": "build_completed",
-      "type": "build_completed",
-      "description": "Build completed signal observed"
+      "type": "build_completed"
+    },
+    {
+      "id": "artifact_generated",
+      "type": "artifact_generated",
+      "params": { "minCount": 0 },
+      "description": "Artifact collection observed (min 0 for platform smoke; runtime asserts artifacts separately)"
     },
     {
       "id": "execution_duration",
       "type": "execution_duration",
-      "params": { "maxSeconds": 600 },
-      "description": "Execution finished within time budget"
-    },
-    {
-      "id": "expected_readme_artifact",
-      "type": "expected_artifact",
-      "params": { "name": "README.md" }
+      "params": { "maxSeconds": 600 }
     }
   ],
   "successCriteria": {
@@ -123,22 +116,33 @@
       "project_started",
       "project_completed",
       "runtime_status",
+      "execution_successful"
+    ],
+    "runtimeAcceptanceRuleIds": [
+      "project_started",
+      "project_completed",
+      "runtime_status",
       "execution_successful",
-      "file_readme",
-      "dir_backend",
-      "dir_frontend",
+      "workspace_created",
+      "files_generated",
+      "readme_exists",
+      "docker_compose_exists",
+      "backend_exists",
+      "frontend_exists",
+      "sqlite_config_exists",
+      "tests_exist",
       "tests_executed",
       "build_completed"
     ]
   },
   "execution": {
-    "prompt": "Build a complete Hello Notes software project end-to-end.\n\nRequirements:\n- Docker\n- Backend\n- Frontend\n- SQLite\n- CRUD Notes\n- Search\n- README\n- Tests\n\nDeliver a working project layout with backend API, frontend UI, SQLite schema, docker-compose, README, and tests.\nInspection first.\nDo not modify unrelated repositories.",
+    "prompt": "Build a complete Hello Notes software project end-to-end through autonomous engineering.\n\nRequirements:\n- REST backend\n- Frontend UI\n- SQLite\n- CRUD Notes\n- Search\n- Docker support\n- README\n- Unit tests\n\nDeliver a working project layout with backend API, frontend UI, SQLite schema, Dockerfile, docker-compose, README, and tests.\nInspection first.\nDo not modify unrelated repositories.",
     "projectId": "proj_hello_notes",
     "projectSlug": "hello-notes",
     "projectDisplayName": "Hello Notes",
     "provider": "github",
     "repository": "local/hello-notes",
-    "timeoutSeconds": 90,
+    "timeoutSeconds": 120,
     "referenceWorkspace": "workspace",
     "clarifyAnswers": {}
   }

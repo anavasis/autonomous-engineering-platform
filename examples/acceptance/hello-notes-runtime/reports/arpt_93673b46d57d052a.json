@@ -1,0 +1,323 @@
+{
+    "id": "arpt_93673b46d57d052a",
+    "projectName": "hello-notes",
+    "success": true,
+    "executionSummary": {
+        "missionId": "msn_093ed53b9b45",
+        "runId": "run_3922ca6e66bf",
+        "jobId": "job_d28e3f1166f9dc8f",
+        "engineState": "waiting",
+        "runtimeStatus": "completed",
+        "projectStarted": true,
+        "passedCount": 16,
+        "failedCount": 0,
+        "rulesTotal": 16
+    },
+    "passedValidations": [
+        {
+            "ruleId": "project_started",
+            "type": "project_started",
+            "passed": true,
+            "message": "Project execution started.",
+            "details": {
+                "missionId": "msn_093ed53b9b45",
+                "runId": "run_3922ca6e66bf",
+                "jobId": "job_d28e3f1166f9dc8f"
+            }
+        },
+        {
+            "ruleId": "project_completed",
+            "type": "project_completed",
+            "passed": true,
+            "message": "Project completed with engine state: waiting",
+            "details": {
+                "engineState": "waiting",
+                "acceptedStates": [
+                    "completed",
+                    "waiting"
+                ]
+            }
+        },
+        {
+            "ruleId": "runtime_status",
+            "type": "runtime_status",
+            "passed": true,
+            "message": "Runtime status acceptable: completed",
+            "details": {
+                "runtimeStatus": "completed",
+                "accepted": [
+                    "completed"
+                ]
+            }
+        },
+        {
+            "ruleId": "execution_successful",
+            "type": "execution_successful",
+            "passed": true,
+            "message": "Execution successful.",
+            "details": {
+                "runtimeStatus": "completed",
+                "engineState": "waiting"
+            }
+        },
+        {
+            "ruleId": "workspace_created",
+            "type": "directory_exists",
+            "passed": true,
+            "message": "Required directory exists: .",
+            "details": {
+                "path": ".",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/."
+            }
+        },
+        {
+            "ruleId": "files_generated",
+            "type": "file_exists",
+            "passed": true,
+            "message": "Required file exists: README.md",
+            "details": {
+                "path": "README.md",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/README.md"
+            }
+        },
+        {
+            "ruleId": "readme_exists",
+            "type": "file_exists",
+            "passed": true,
+            "message": "Required file exists: README.md",
+            "details": {
+                "path": "README.md",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/README.md"
+            }
+        },
+        {
+            "ruleId": "docker_compose_exists",
+            "type": "file_exists",
+            "passed": true,
+            "message": "Required file exists: docker-compose.yml",
+            "details": {
+                "path": "docker-compose.yml",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/docker-compose.yml"
+            }
+        },
+        {
+            "ruleId": "backend_exists",
+            "type": "directory_exists",
+            "passed": true,
+            "message": "Required directory exists: backend",
+            "details": {
+                "path": "backend",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/backend"
+            }
+        },
+        {
+            "ruleId": "frontend_exists",
+            "type": "directory_exists",
+            "passed": true,
+            "message": "Required directory exists: frontend",
+            "details": {
+                "path": "frontend",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/frontend"
+            }
+        },
+        {
+            "ruleId": "sqlite_config_exists",
+            "type": "file_exists",
+            "passed": true,
+            "message": "Required file exists: backend\/db\/schema.ddl",
+            "details": {
+                "path": "backend\/db\/schema.ddl",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/backend\/db\/schema.ddl"
+            }
+        },
+        {
+            "ruleId": "tests_exist",
+            "type": "file_exists",
+            "passed": true,
+            "message": "Required file exists: backend\/tests\/NotesTest.php",
+            "details": {
+                "path": "backend\/tests\/NotesTest.php",
+                "resolved": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace\/backend\/tests\/NotesTest.php"
+            }
+        },
+        {
+            "ruleId": "tests_executed",
+            "type": "tests_executed",
+            "passed": true,
+            "message": "Tests executed.",
+            "details": {
+                "signal": "tests_executed",
+                "value": true
+            }
+        },
+        {
+            "ruleId": "build_completed",
+            "type": "build_completed",
+            "passed": true,
+            "message": "Build completed.",
+            "details": {
+                "signal": "build_completed",
+                "value": true
+            }
+        },
+        {
+            "ruleId": "artifact_generated",
+            "type": "artifact_generated",
+            "passed": true,
+            "message": "Artifacts generated: 5 (min 0).",
+            "details": {
+                "count": 5,
+                "minCount": 0,
+                "expectedArtifacts": [
+                    "README.md",
+                    "Dockerfile",
+                    "docker-compose.yml",
+                    "backend\/",
+                    "frontend\/",
+                    "backend\/db\/schema.ddl",
+                    "backend\/tests\/NotesTest.php"
+                ]
+            }
+        },
+        {
+            "ruleId": "execution_duration",
+            "type": "execution_duration",
+            "passed": true,
+            "message": "Execution duration 0.01s within bounds [0, 600].",
+            "details": {
+                "elapsedSeconds": 0.009335994720458984,
+                "minSeconds": 0,
+                "maxSeconds": 600
+            }
+        }
+    ],
+    "failedValidations": [],
+    "producedArtifacts": [
+        {
+            "artifactId": "report.execution.prompt",
+            "kind": "report",
+            "name": "prompt-bundle.json",
+            "contentType": "application\/json",
+            "byteSize": 650,
+            "contentHash": "sha256:0512d6f79906badff279098599034209e013f27919e7ad8e17770368f2c863a6",
+            "createdAtUtc": "2026-08-03T05:55:15Z",
+            "persistent": true
+        },
+        {
+            "artifactId": "report.execution.diff",
+            "kind": "report",
+            "name": "execution.diff",
+            "contentType": "application\/json",
+            "byteSize": 0,
+            "contentHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "createdAtUtc": "2026-08-03T05:55:15Z",
+            "persistent": true
+        },
+        {
+            "artifactId": "log.execution.provider",
+            "kind": "log",
+            "name": "provider.log",
+            "contentType": "application\/json",
+            "byteSize": 426,
+            "contentHash": "sha256:439afb0ead66290defde2efda6a09a0bd2fc0252c46c5d6e8f484f61e472767b",
+            "createdAtUtc": "2026-08-03T05:55:15Z",
+            "persistent": true
+        },
+        {
+            "artifactId": "report.execution.usage",
+            "kind": "report",
+            "name": "usage.json",
+            "contentType": "application\/json",
+            "byteSize": 158,
+            "contentHash": "sha256:f243b8e6904022bb2305c1105384c29bd98e915756cc1ac61803b4105ee3fc23",
+            "createdAtUtc": "2026-08-03T05:55:15Z",
+            "persistent": true
+        },
+        {
+            "artifactId": "checkpoint.execution.session",
+            "kind": "checkpoint",
+            "name": "execution-checkpoint.json",
+            "contentType": "application\/json",
+            "byteSize": 191,
+            "contentHash": "sha256:f2ea1d57bef294e9b683eaa5e56508146533db7c79930957a9cc03f75a0b5315",
+            "createdAtUtc": "2026-08-03T05:55:15Z",
+            "persistent": true
+        }
+    ],
+    "executionTimeSeconds": 0.009335994720458984,
+    "providerUsage": {
+        "providers": {
+            "hello-notes-agent": 1
+        },
+        "sessions": [
+            {
+                "sessionId": "esess_9e368af24685e2f5",
+                "providerId": "hello-notes-agent"
+            }
+        ]
+    },
+    "runtimeEvents": [
+        {
+            "id": "rte_5100da80e84a7c97",
+            "jobId": "job_d28e3f1166f9dc8f",
+            "type": "JobQueued",
+            "at": "2026-08-03T05:55:15Z",
+            "data": {
+                "type": "mission-execution",
+                "priority": "NORMAL",
+                "metadata": {
+                    "provider": "github",
+                    "repository": "local\/hello-notes",
+                    "requestedBy": "user_runtime_acc",
+                    "planId": "plan_fd752bdf363d",
+                    "projectId": "proj_hello_notes",
+                    "runId": "run_3922ca6e66bf",
+                    "missionId": "msn_093ed53b9b45"
+                }
+            }
+        },
+        {
+            "id": "rte_a24b01e78c4a8c94",
+            "jobId": "job_d28e3f1166f9dc8f",
+            "type": "JobClaimed",
+            "at": "2026-08-03T05:55:15Z",
+            "data": {
+                "workerId": "acceptance-44295",
+                "attempts": 1,
+                "leaseExpiresAt": "2026-08-03T05:56:15Z",
+                "priority": "NORMAL"
+            }
+        },
+        {
+            "id": "rte_e7d32cf38734a154",
+            "jobId": "job_d28e3f1166f9dc8f",
+            "type": "Heartbeat",
+            "at": "2026-08-03T05:55:15Z",
+            "data": {
+                "workerId": "acceptance-44295",
+                "leaseExpiresAt": "2026-08-03T05:56:15Z"
+            }
+        },
+        {
+            "id": "rte_a23b9e612501c505",
+            "jobId": "job_d28e3f1166f9dc8f",
+            "type": "LeaseRenewed",
+            "at": "2026-08-03T05:55:15Z",
+            "data": {
+                "workerId": "acceptance-44295",
+                "leaseExpiresAt": "2026-08-03T05:56:15Z"
+            }
+        },
+        {
+            "id": "rte_d1971b11d6f3addf",
+            "jobId": "job_d28e3f1166f9dc8f",
+            "type": "Completed",
+            "at": "2026-08-03T05:55:15Z",
+            "data": {
+                "workerId": "acceptance-44295"
+            }
+        }
+    ],
+    "recommendation": "Acceptance criteria met. Safe to treat this run as a successful autonomous delivery validation.",
+    "createdAtUtc": "2026-08-03T05:55:15Z"
+}

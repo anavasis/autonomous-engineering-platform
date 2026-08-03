@@ -1,0 +1,39 @@
+{
+  "providers": [
+    {
+      "id": "hello-notes-agent",
+      "type": "cursor-cli",
+      "enabled": true,
+      "displayName": "Hello Notes Scaffold Agent",
+      "options": {
+        "simulate": false,
+        "binary": "",
+        "envBinaryKey": "AEP_HELLO_NOTES_AGENT_BINARY",
+        "useRepoCwd": true,
+        "promptViaStdin": true,
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
+          "tools": true,
+          "maxContextTokens": 64000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "local-agent",
+      "type": "local-agent",
+      "enabled": true,
+      "displayName": "Local Agent"
+    },
+    {
+      "id": "legacy-local",
+      "type": "legacy-local",
+      "enabled": true,
+      "displayName": "Legacy Local Executor"
+    }
+  ]
+}
