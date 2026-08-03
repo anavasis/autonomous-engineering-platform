@@ -1,0 +1,145 @@
+{
+  "name": "hello-notes",
+  "description": "End-to-end acceptance project: Dockerized notes app with backend, frontend, SQLite, CRUD, search, README, and tests.",
+  "requirements": [
+    "Docker-based local development and run story",
+    "Backend API service",
+    "Frontend UI",
+    "SQLite persistence",
+    "CRUD Notes (create, read, update, delete)",
+    "Search notes",
+    "README with setup and usage",
+    "Automated tests"
+  ],
+  "expectedArtifacts": [
+    "README.md",
+    "docker-compose.yml",
+    "backend/",
+    "frontend/",
+    "reports/tests.xml",
+    "reports/build.txt"
+  ],
+  "validationRules": [
+    {
+      "id": "project_started",
+      "type": "project_started",
+      "description": "Mission and run were created"
+    },
+    {
+      "id": "project_completed",
+      "type": "project_completed",
+      "params": {
+        "acceptedStates": ["completed", "waiting"]
+      },
+      "description": "Mission engine reached a successful post-drive state"
+    },
+    {
+      "id": "runtime_status",
+      "type": "runtime_status",
+      "params": {
+        "accepted": ["completed"]
+      },
+      "description": "Runtime job completed"
+    },
+    {
+      "id": "execution_successful",
+      "type": "execution_successful",
+      "description": "Runtime execution succeeded without engine failure"
+    },
+    {
+      "id": "artifact_generated",
+      "type": "artifact_generated",
+      "params": {
+        "minCount": 0
+      },
+      "description": "Artifact collection observed (min 0 for platform smoke; raise when providers emit workspace artifacts)"
+    },
+    {
+      "id": "file_readme",
+      "type": "file_exists",
+      "params": { "path": "README.md" },
+      "description": "README present in evaluation workspace"
+    },
+    {
+      "id": "file_compose",
+      "type": "file_exists",
+      "params": { "path": "docker-compose.yml" }
+    },
+    {
+      "id": "dir_backend",
+      "type": "directory_exists",
+      "params": { "path": "backend" }
+    },
+    {
+      "id": "dir_frontend",
+      "type": "directory_exists",
+      "params": { "path": "frontend" }
+    },
+    {
+      "id": "file_sqlite_schema",
+      "type": "file_exists",
+      "params": { "path": "backend/db/schema.ddl" }
+    },
+    {
+      "id": "file_notes_api",
+      "type": "file_exists",
+      "params": { "path": "backend/src/notes.php" }
+    },
+    {
+      "id": "file_search",
+      "type": "file_exists",
+      "params": { "path": "backend/src/search.php" }
+    },
+    {
+      "id": "file_frontend_app",
+      "type": "file_exists",
+      "params": { "path": "frontend/src/App.tsx" }
+    },
+    {
+      "id": "tests_executed",
+      "type": "tests_executed",
+      "description": "Tests executed signal observed"
+    },
+    {
+      "id": "build_completed",
+      "type": "build_completed",
+      "description": "Build completed signal observed"
+    },
+    {
+      "id": "execution_duration",
+      "type": "execution_duration",
+      "params": { "maxSeconds": 600 },
+      "description": "Execution finished within time budget"
+    },
+    {
+      "id": "expected_readme_artifact",
+      "type": "expected_artifact",
+      "params": { "name": "README.md" }
+    }
+  ],
+  "successCriteria": {
+    "requireAllRules": false,
+    "requiredRuleIds": [
+      "project_started",
+      "project_completed",
+      "runtime_status",
+      "execution_successful",
+      "file_readme",
+      "dir_backend",
+      "dir_frontend",
+      "tests_executed",
+      "build_completed"
+    ]
+  },
+  "execution": {
+    "prompt": "Build a complete Hello Notes software project end-to-end.\n\nRequirements:\n- Docker\n- Backend\n- Frontend\n- SQLite\n- CRUD Notes\n- Search\n- README\n- Tests\n\nDeliver a working project layout with backend API, frontend UI, SQLite schema, docker-compose, README, and tests.\nInspection first.\nDo not modify unrelated repositories.",
+    "projectId": "proj_hello_notes",
+    "projectSlug": "hello-notes",
+    "projectDisplayName": "Hello Notes",
+    "provider": "github",
+    "repository": "local/hello-notes",
+    "timeoutSeconds": 90,
+    "referenceWorkspace": "workspace",
+    "clarifyAnswers": {}
+  }
+}
