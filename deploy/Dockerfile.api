@@ -6,12 +6,15 @@ COPY src ./src
 COPY tests/bootstrap.php ./tests/bootstrap.php
 COPY apps/mission-control-api ./apps/mission-control-api
 COPY deploy/api-router.php ./deploy/api-router.php
+COPY bin ./bin
+COPY VERSION ./VERSION
 
 RUN mkdir -p /var/aep/data \
-  && chown -R www-data:www-data /var/aep/data
+  && chown -R www-data:www-data /var/aep/data \
+  && chmod +x bin/execution-worker.php
 
 ENV AEP_DATA_ROOT=/var/aep/data
-ENV AEP_VERSION=0.1.0
+ENV AEP_VERSION=1.7.0
 
 USER www-data
 EXPOSE 8080

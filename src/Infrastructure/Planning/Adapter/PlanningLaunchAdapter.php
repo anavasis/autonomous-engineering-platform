@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Aep\Infrastructure\Planning\Adapter;
 
+use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
+use Aep\Application\ExecutionRuntime\Model\JobPriority;
+use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\Mission\Command\CreateMission;
 use Aep\Application\Mission\Command\DefineScope;
 use Aep\Application\Mission\MissionCommandService;
@@ -16,13 +19,14 @@ use Aep\Application\Planning\Port\PlanningLaunchPort;
 
 /**
  * Launches program nodes through MissionCommandService + MissionEngine only.
- * Does not modify Mission Engine semantics or Domain FSM rules.
+ * Scheduler admission stays synchronous; MissionEngine drive is enqueued when Runtime is wired.
  */
 final class PlanningLaunchAdapter implements PlanningLaunchPort
 {
     public function __construct(
         private readonly MissionCommandService $missions,
         private readonly MissionEngine $engine,
+        private readonly ?JobDispatcher $runtime = null,
     ) {
     }
 
@@ -79,20 +83,55 @@ final class PlanningLaunchAdapter implements PlanningLaunchPort
             $attributes['projectId'] = $program->projectId();
         }
 
-        $result = $this->engine->start(new MissionEngineRequest(
-            $runId,
-            $missionId,
-            $at,
-            'system',
-            $actorId,
-            $attributes,
-            $program->projectId(),
-        ));
+        if ($this->runtime === null) {
+            $result = $this->engine->start(new MissionEngineRequest(
+                $runId,
+                $missionId,
+                $at,
+                'system',
+                $actorId,
+                $attributes,
+                $program->projectId(),
+            ));
+
+            return [
+                'missionId' => $missionId,
+                'runId' => $runId,
+                'message' => $result->message(),
+            ];
+        }
+
+        $job = $this->runtime->enqueue(
+            MissionExecutionJobHandler::TYPE,
+            [
+                'action' => 'start',
+                'runId' => $runId,
+                'missionId' => $missionId,
+                'actorType' => 'system',
+                'actorId' => $actorId,
+                'projectId' => $program->projectId(),
+                'attributes' => $attributes,
+                'occurredAtUtc' => $at,
+            ],
+            null,
+            JobPriority::NORMAL,
+            array_filter([
+                'provider' => 'github',
+                'repository' => 'local/planning-program',
+                'requestedBy' => $actorId,
+                'programId' => $program->programId(),
+                'programNodeId' => $node->nodeId(),
+                'projectId' => $program->projectId(),
+                'runId' => $runId,
+                'missionId' => $missionId,
+            ], static fn ($v) => $v !== null && $v !== ''),
+        );
 
         return [
             'missionId' => $missionId,
             'runId' => $runId,
-            'message' => $result->message(),
+            'message' => 'Mission execution enqueued.',
+            'jobId' => $job->id(),
         ];
     }
 }
