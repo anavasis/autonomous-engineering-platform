@@ -16,6 +16,7 @@ use Aep\Infrastructure\EngineeringExecution\Provider\ClaudeCodeCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\CodexCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\CursorCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\ExternalCliProvider;
+use Aep\Infrastructure\EngineeringExecution\Provider\GeminiCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\LocalAgentProvider;
 use Aep\Infrastructure\EngineeringExecution\Provider\StubCliProvider;
 use Aep\Infrastructure\EngineeringExecution\Registry\ConfigProviderRegistry;
@@ -91,11 +92,13 @@ final class ProviderRoutingExecutorTest
             Assert::true($registry->get('claude-code') instanceof ExternalCliProvider);
             Assert::true($registry->get('codex') instanceof CodexCliProvider);
             Assert::true($registry->get('codex') instanceof ExternalCliProvider);
+            Assert::true($registry->get('gemini-cli') instanceof GeminiCliProvider);
+            Assert::true($registry->get('gemini-cli') instanceof ExternalCliProvider);
             $health = $registry->get('cursor')->health();
             Assert::true($health->isAvailable());
             Assert::true($registry->get('claude-code')->health()->isAvailable());
             Assert::true($registry->get('codex')->health()->isAvailable());
-            Assert::same('degraded', $registry->get('gemini-cli')->health()->status());
+            Assert::true($registry->get('gemini-cli')->health()->isAvailable());
 
             $ext = new ConfigProviderRegistry([
                 'providers' => [
@@ -170,6 +173,15 @@ final class ProviderRoutingExecutorTest
         $suite->test_json_args_remain_configurable();
     }
 
+    public function test_gemini_cli_provider_suite(): void
+    {
+        require_once __DIR__ . '/GeminiCliProviderTest.php';
+        $suite = new GeminiCliProviderTest();
+        $suite->test_health_unavailable_when_binary_missing();
+        $suite->test_run_uses_print_flag_and_prompt_argv();
+        $suite->test_json_args_remain_configurable();
+    }
+
     private function router(string $root, ?JsonExecutionSettingsStore $settings = null): ProviderRoutingExecutor
     {
         $executionDir = $root . '/execution';
@@ -202,14 +214,17 @@ final class ProviderRoutingExecutorTest
             'promptViaStdin' => false,
             'args' => ['exec', '--sandbox', 'workspace-write'],
         ];
+        $geminiOptions = ['simulate' => false, 'useRepoCwd' => false, 'promptViaStdin' => false, 'args' => ['-p']];
         if (is_string($cursorBinary) && $cursorBinary !== '') {
             $cursorOptions['binary'] = $cursorBinary;
             $claudeOptions['binary'] = $cursorBinary;
             $codexOptions['binary'] = $cursorBinary;
+            $geminiOptions['binary'] = $cursorBinary;
         } else {
             $cursorOptions['binary'] = '/tmp/aep-cursor-missing-' . bin2hex(random_bytes(3));
             $claudeOptions['binary'] = '/tmp/aep-claude-missing-' . bin2hex(random_bytes(3));
             $codexOptions['binary'] = '/tmp/aep-codex-missing-' . bin2hex(random_bytes(3));
+            $geminiOptions['binary'] = '/tmp/aep-gemini-missing-' . bin2hex(random_bytes(3));
         }
 
         return new ConfigProviderRegistry([
@@ -218,7 +233,7 @@ final class ProviderRoutingExecutorTest
                 ['id' => 'cursor', 'type' => 'cursor-cli', 'enabled' => true, 'displayName' => 'Cursor Agent', 'options' => $cursorOptions],
                 ['id' => 'codex', 'type' => 'codex-cli', 'enabled' => true, 'displayName' => 'OpenAI Codex', 'options' => $codexOptions],
                 ['id' => 'claude-code', 'type' => 'claude-code-cli', 'enabled' => true, 'displayName' => 'Claude Code', 'options' => $claudeOptions],
-                ['id' => 'gemini-cli', 'type' => 'stub-cli', 'enabled' => true, 'displayName' => 'Gemini CLI', 'options' => ['simulate' => true]],
+                ['id' => 'gemini-cli', 'type' => 'gemini-cli', 'enabled' => true, 'displayName' => 'Gemini CLI', 'options' => $geminiOptions],
             ],
         ], [
             'local-agent' => static fn (array $o): LocalAgentProvider => new LocalAgentProvider($o),
@@ -226,6 +241,7 @@ final class ProviderRoutingExecutorTest
             'cursor-cli' => static fn (array $o): CursorCliProvider => new CursorCliProvider($o),
             'claude-code-cli' => static fn (array $o): ClaudeCodeCliProvider => new ClaudeCodeCliProvider($o),
             'codex-cli' => static fn (array $o): CodexCliProvider => new CodexCliProvider($o),
+            'gemini-cli' => static fn (array $o): GeminiCliProvider => new GeminiCliProvider($o),
             'external-cli' => static fn (array $o): ExternalCliProvider => new ExternalCliProvider($o),
         ]);
     }
