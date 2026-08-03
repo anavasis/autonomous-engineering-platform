@@ -48,10 +48,15 @@ use Aep\Application\EngineeringExecution\Service\ResultNormalizer;
 use Aep\Application\EngineeringExecution\Service\WorkspacePreparer;
 use Aep\Application\EngineeringWorkspace\Service\EngineeringWorkspaceService;
 use Aep\Application\EngineeringWorkspace\Service\WorkspaceQueryService;
+use Aep\Application\Acceptance\Service\AcceptanceReportFactory;
+use Aep\Application\Acceptance\Service\AcceptanceRunner;
+use Aep\Application\Acceptance\Service\AcceptanceValidator;
 use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
 use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
 use Aep\Application\ExecutionRuntime\Service\RuntimeCancellation;
 use Aep\Application\ExecutionRuntime\Service\RuntimeWorker;
+use Aep\Infrastructure\Acceptance\FilesystemAcceptanceProjectRepository;
+use Aep\Infrastructure\Acceptance\FilesystemAcceptanceReportStore;
 use Aep\Infrastructure\ExecutionRuntime\FilesystemJobQueue;
 use Aep\Infrastructure\ExecutionRuntime\FilesystemRuntimeEventStore;
 use Aep\Application\Execution\ExecutionService;
@@ -193,9 +198,10 @@ final class MissionControlKernel
     private GovernanceObserveAdapter $governanceObserve;
     private JobDispatcher $jobDispatcher;
     private RuntimeWorker $runtimeWorker;
+    private AcceptanceRunner $acceptance;
     private string $dataRoot;
 
-    public function __construct(string $dataRoot, string $version = '1.7.0')
+    public function __construct(string $dataRoot, string $version = '1.7.1')
     {
         $this->dataRoot = rtrim($dataRoot, "/\\");
         if ($this->dataRoot === '') {
@@ -219,6 +225,7 @@ final class MissionControlKernel
         $optimizationDir = $this->dataRoot . '/optimization';
         $governanceDir = $this->dataRoot . '/governance';
         $runtimeDir = $this->dataRoot . '/runtime';
+        $acceptanceDir = $this->dataRoot . '/acceptance';
 
         foreach ([
             $missionsDir,
@@ -238,6 +245,8 @@ final class MissionControlKernel
             $optimizationDir,
             $governanceDir,
             $runtimeDir,
+            $acceptanceDir,
+            $acceptanceDir . '/reports',
         ] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
                 throw new \RuntimeException('Unable to create data directory: ' . $dir);
@@ -460,10 +469,8 @@ final class MissionControlKernel
             $validationPipeline
         );
 
-        $jobQueue = new FilesystemJobQueue(
-            $runtimeDir,
-            new FilesystemRuntimeEventStore($runtimeDir),
-        );
+        $runtimeEventStore = new FilesystemRuntimeEventStore($runtimeDir);
+        $jobQueue = new FilesystemJobQueue($runtimeDir, $runtimeEventStore);
         $leaseSeconds = 60;
         $leaseEnv = getenv('AEP_RUNTIME_LEASE_SECONDS');
         if (is_string($leaseEnv) && is_numeric($leaseEnv)) {
@@ -606,6 +613,32 @@ final class MissionControlKernel
         // Keep knowledge adapter available for future plan-time enrichment without coupling planner ctor.
         new PlanningKnowledgeAdapter($this->knowledgeQuery);
 
+        $repoRoot = dirname(__DIR__, 3);
+        $acceptanceProjectRoots = [
+            $repoRoot . '/examples/acceptance',
+            $acceptanceDir . '/projects',
+        ];
+        $configuredProjects = getenv('AEP_ACCEPTANCE_PROJECTS');
+        if (is_string($configuredProjects) && trim($configuredProjects) !== '') {
+            array_unshift($acceptanceProjectRoots, rtrim($configuredProjects, "/\\"));
+        }
+        $this->acceptance = new AcceptanceRunner(
+            new FilesystemAcceptanceProjectRepository($acceptanceProjectRoots),
+            new FilesystemAcceptanceReportStore($acceptanceDir),
+            new AcceptanceValidator(),
+            new AcceptanceReportFactory(),
+            $this->ame,
+            $this->commands,
+            $projectCommands,
+            $this->missions,
+            $this->artifacts,
+            $this->jobDispatcher,
+            $this->runtimeWorker,
+            $runtimeEventStore,
+            $this->executionQuery,
+            $this->dataRoot,
+        );
+
         $this->bootstrapAdmin();
     }
 
@@ -742,6 +775,11 @@ final class MissionControlKernel
     public function dataRoot(): string
     {
         return $this->dataRoot;
+    }
+
+    public function acceptance(): AcceptanceRunner
+    {
+        return $this->acceptance;
     }
 
     /** @return array<string, mixed> */
