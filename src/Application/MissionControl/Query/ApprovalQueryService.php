@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aep\Application\MissionControl\Query;
 
 use Aep\Application\MissionControl\Catalog\MissionCatalog;
+use Aep\Application\MissionEngine\MissionCheckpoint;
 use Aep\Application\MissionEngine\MissionRunState;
 use Aep\Domain\Mission\ValueObject\MissionState;
 
@@ -26,8 +27,11 @@ final class ApprovalQueryService
             $id = $mission->id()->toString();
             $run = $this->missionQuery->latestRun($id);
             $state = $mission->state()->toString();
+            $waitingInspectionGate = $this->isWaitingOnInspectionGate($run);
 
-            if ($state === MissionState::AWAITING_INSPECTION_APPROVAL) {
+            // When the engine is paused on ManualGateStep('inspection'), the gate row is
+            // the single actionable approval. Do not also emit kind=inspection.
+            if ($state === MissionState::AWAITING_INSPECTION_APPROVAL && !$waitingInspectionGate) {
                 $queue[] = [
                     'missionId' => $id,
                     'kind' => 'inspection',
@@ -54,7 +58,11 @@ final class ApprovalQueryService
             }
 
             if ($run !== null && $run->engineState() === MissionRunState::WAITING) {
-                $gateId = $this->pendingGateId($run->attributes(), $run->message(), $run->planStepIds()[$run->cursorIndex()] ?? null);
+                $gateId = $this->pendingGateId(
+                    $run->attributes(),
+                    $run->message(),
+                    $run->planStepIds()[$run->cursorIndex()] ?? null
+                );
                 $queue[] = [
                     'missionId' => $id,
                     'kind' => 'implementation_gate',
@@ -75,6 +83,20 @@ final class ApprovalQueryService
         );
 
         return $queue;
+    }
+
+    private function isWaitingOnInspectionGate(?MissionCheckpoint $run): bool
+    {
+        if ($run === null || $run->engineState() !== MissionRunState::WAITING) {
+            return false;
+        }
+        $gateId = $this->pendingGateId(
+            $run->attributes(),
+            $run->message(),
+            $run->planStepIds()[$run->cursorIndex()] ?? null
+        );
+
+        return $gateId === 'inspection';
     }
 
     /**
