@@ -29,7 +29,7 @@ use Tests\Support\EngineeringWorkspaceTestFactory;
 
 final class ProviderRoutingExecutorTest
 {
-    public function test_no_provider_keeps_legacy_local_behavior(): void
+    public function test_no_provider_rejects_implement_fail_closed(): void
     {
         $root = sys_get_temp_dir() . '/aep_route_' . bin2hex(random_bytes(4));
         try {
@@ -40,10 +40,9 @@ final class ProviderRoutingExecutorTest
                 '2026-07-31T12:00:00Z',
                 []
             ));
-            Assert::true($result->isSucceeded());
+            Assert::true($result->isRejected());
             Assert::same(ProviderRoutingExecutor::ID, $result->executorId());
-            Assert::same(DeclarativeLocalExecutor::ID, $result->context()['actualExecutorId'] ?? null);
-            Assert::same('declarative local execution acknowledged', $result->message());
+            Assert::true(str_contains($result->message(), 'No real execution provider is configured'));
         } finally {
             $this->removeDir($root);
         }

@@ -21,6 +21,7 @@ use Aep\Application\MissionExecution\Model\ExecutionPlan;
 use Aep\Application\MissionExecution\Model\MissionIntake;
 use Aep\Application\MissionExecution\Service\LaunchFacade;
 use Aep\Application\Validation\ValidationPipeline;
+use Aep\Infrastructure\EngineeringExecution\Store\JsonExecutionSettingsStore;
 use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 use Aep\Infrastructure\ExecutionRuntime\FilesystemJobQueue;
 use Aep\Infrastructure\ExecutionRuntime\FilesystemRuntimeEventStore;
@@ -45,6 +46,7 @@ final class MissionExecutionRuntimeTest
             Assert::same('github', $job?->metadata()['provider'] ?? null);
             Assert::same('org/repo', $job?->metadata()['repository'] ?? null);
             Assert::same('user_rt', $job?->metadata()['requestedBy'] ?? null);
+            Assert::same('codex', $job?->payload()['attributes']['providerId'] ?? null);
 
             Assert::same(1, $worker->processAvailable('test-worker', 1));
             $job = $queue->get((string) $result['jobId']);
@@ -116,7 +118,9 @@ final class MissionExecutionRuntimeTest
         $queue = new FilesystemJobQueue($root . '/runtime', $events);
         $worker = new RuntimeWorker($queue, [new MissionExecutionJobHandler($engine)], 30);
         $dispatcher = new JobDispatcher($queue, $worker, $inline);
-        $launch = new LaunchFacade($missions, $engine, $dispatcher);
+        $settings = new JsonExecutionSettingsStore($root . '/execution');
+        $settings->update(['defaultProviderId' => 'codex']);
+        $launch = new LaunchFacade($missions, $engine, $dispatcher, $settings);
 
         return [$launch, $worker, $queue, $events];
     }

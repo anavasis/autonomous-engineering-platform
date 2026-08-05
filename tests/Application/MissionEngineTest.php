@@ -21,7 +21,6 @@ use Aep\Application\Validation\ValidationPipeline;
 use Aep\Application\Validation\ValidationRequest;
 use Aep\Application\Validation\ValidationStep;
 use Aep\Domain\Mission\ValueObject\MissionState;
-use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 use Aep\Infrastructure\MissionEngine\InMemoryMissionRunRepository;
 use Aep\Infrastructure\Persistence\InMemoryMissionRepository;
 use Aep\Infrastructure\Validation\DeclarativeContextValidationStep;
@@ -41,6 +40,7 @@ final class MissionEngineTest
             'run_happy',
             'msn_engine_happy',
             [
+                'providerId' => 'codex',
                 'gate.inspection' => 'approved',
                 'gate.commit' => 'approved',
                 'allowedPaths' => ['src/Application/MissionEngine/'],
@@ -51,6 +51,14 @@ final class MissionEngineTest
         Assert::same(MissionState::COMPLETED, $start->missionState());
         Assert::same(100, $start->progressPercent());
         Assert::true(count($start->completedStepIds()) >= 12);
+        $timeline = $harness['runs']->getTimeline('run_happy');
+        $completeMsgs = [];
+        foreach ($timeline->entries() as $entry) {
+            if ($entry->step() === 'complete_mission' && $entry->event() === 'step_finished') {
+                $completeMsgs[] = $entry->message();
+            }
+        }
+        Assert::true(in_array('Mission completed with verified patch artifact.', $completeMsgs, true));
     }
 
     public function test_retry(): void
@@ -85,6 +93,7 @@ final class MissionEngineTest
             'run_retry',
             'msn_engine_retry',
             [
+                'providerId' => 'codex',
                 'gate.inspection' => 'approved',
                 'gate.commit' => 'approved',
                 'retryMaxAttempts' => 3,
@@ -123,6 +132,7 @@ final class MissionEngineTest
             'run_timeout',
             'msn_engine_timeout',
             [
+                'providerId' => 'codex',
                 'gate.inspection' => 'approved',
                 'gate.commit' => 'approved',
             ],
@@ -143,7 +153,7 @@ final class MissionEngineTest
         $waiting = $harness['engine']->start($this->request(
             'run_cancel',
             'msn_engine_cancel',
-            ['allowedPaths' => ['src/']]
+            ['providerId' => 'codex', 'allowedPaths' => ['src/Application/MissionEngine/']]
         ));
         Assert::same(MissionRunState::WAITING, $waiting->engineState()->toString());
         Assert::same('inspection', $waiting->currentStepId());
@@ -168,7 +178,7 @@ final class MissionEngineTest
         $waiting = $harness['engine']->start($this->request(
             'run_resume',
             'msn_engine_resume',
-            []
+            ['providerId' => 'codex', 'allowedPaths' => ['src/Application/MissionEngine/']]
         ));
         Assert::same(MissionRunState::WAITING, $waiting->engineState()->toString());
         Assert::true($waiting->progressPercent() < 100);
@@ -207,8 +217,10 @@ final class MissionEngineTest
             'run_valfail',
             'msn_engine_valfail',
             [
+                'providerId' => 'codex',
                 'gate.inspection' => 'approved',
                 'gate.commit' => 'approved',
+                'allowedPaths' => ['src/Application/MissionEngine/'],
             ]
         ));
 
@@ -225,7 +237,7 @@ final class MissionEngineTest
         $waiting = $harness['engine']->start($this->request(
             'run_progress',
             'msn_engine_progress',
-            []
+            ['providerId' => 'codex', 'allowedPaths' => ['src/Application/MissionEngine/']]
         ));
         Assert::same(MissionRunState::WAITING, $waiting->engineState()->toString());
         Assert::true($waiting->progressPercent() > 0);
@@ -258,7 +270,7 @@ final class MissionEngineTest
         $missionRepo = new InMemoryMissionRepository();
         $missions = new MissionCommandService($missionRepo);
         $runs = new InMemoryMissionRunRepository();
-        $execution = new ExecutionService($executor ?? new DeclarativeLocalExecutor());
+        $execution = new ExecutionService($this->withEvidence($executor));
         $validation ??= new ValidationPipeline([new DeclarativeContextValidationStep()]);
 
         $engine = new MissionEngine(
@@ -276,6 +288,69 @@ final class MissionEngineTest
             'runs' => $runs,
             'missionRepo' => $missionRepo,
         ];
+    }
+
+    private function withEvidence(?Executor $inner): Executor
+    {
+        $evidence = [
+            'providerId' => 'codex',
+            'routedProviderId' => 'codex',
+            'actualExecutorId' => 'provider_routing',
+            'sessionId' => 'esess_engine_test',
+            'workspacePath' => '/tmp/ws_engine_test',
+            'filesChanged' => ['src/Application/MissionEngine/Example.php'],
+            'artifacts' => ['diff' => 'art_engine'],
+            'usage' => ['durationSeconds' => 1.0],
+            'checkpointId' => 'cp_engine',
+            'patchId' => 'patch_engine',
+            'patchStatus' => 'ready',
+            'mergeReady' => true,
+        ];
+
+        if ($inner === null) {
+            return new class ($evidence) implements Executor {
+                /** @param array<string, mixed> $evidence */
+                public function __construct(private array $evidence)
+                {
+                }
+
+                public function id(): string
+                {
+                    return 'provider_routing';
+                }
+
+                public function execute(ExecutionRequest $request): ExecutionResult
+                {
+                    return ExecutionResult::succeeded($this->id(), 'evidence ok', $this->evidence);
+                }
+            };
+        }
+
+        return new class ($inner, $evidence) implements Executor {
+            /** @param array<string, mixed> $evidence */
+            public function __construct(private Executor $inner, private array $evidence)
+            {
+            }
+
+            public function id(): string
+            {
+                return $this->inner->id();
+            }
+
+            public function execute(ExecutionRequest $request): ExecutionResult
+            {
+                $result = $this->inner->execute($request);
+                if (!$result->isSucceeded()) {
+                    return $result;
+                }
+
+                return ExecutionResult::succeeded(
+                    $result->executorId(),
+                    $result->message() !== '' ? $result->message() : 'evidence ok',
+                    array_merge($this->evidence, $result->context())
+                );
+            }
+        };
     }
 
     /**

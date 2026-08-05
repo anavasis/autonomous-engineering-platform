@@ -37,7 +37,20 @@ final class ExecuteImplementationStepContextTest
             {
                 $this->captured = $request;
 
-                return ExecutionResult::succeeded($this->id(), 'ok');
+                return ExecutionResult::succeeded($this->id(), 'ok', [
+                    'providerId' => 'codex',
+                    'routedProviderId' => 'codex',
+                    'actualExecutorId' => 'provider_routing',
+                    'sessionId' => 'esess_ctx',
+                    'workspacePath' => '/tmp/ws_ctx',
+                    'filesChanged' => ['README.md'],
+                    'artifacts' => ['diff' => 'a'],
+                    'usage' => [],
+                    'checkpointId' => 'cp_ctx',
+                    'patchId' => 'patch_ctx',
+                    'patchStatus' => 'ready',
+                    'mergeReady' => true,
+                ]);
             }
         };
 
@@ -102,7 +115,20 @@ final class ExecuteImplementationStepContextTest
             {
                 $this->captured = $request;
 
-                return ExecutionResult::succeeded($this->id(), 'ok');
+                return ExecutionResult::succeeded($this->id(), 'ok', [
+                    'providerId' => 'codex',
+                    'routedProviderId' => 'codex',
+                    'actualExecutorId' => 'provider_routing',
+                    'sessionId' => 'esess_ctx',
+                    'workspacePath' => '/tmp/ws_ctx',
+                    'filesChanged' => ['README.md'],
+                    'artifacts' => ['diff' => 'a'],
+                    'usage' => [],
+                    'checkpointId' => 'cp_ctx',
+                    'patchId' => 'patch_ctx',
+                    'patchStatus' => 'ready',
+                    'mergeReady' => true,
+                ]);
             }
         };
 
@@ -164,7 +190,20 @@ final class ExecuteImplementationStepContextTest
             {
                 $this->captured = $request;
 
-                return ExecutionResult::succeeded($this->id(), 'ok');
+                return ExecutionResult::succeeded($this->id(), 'ok', [
+                    'providerId' => 'codex',
+                    'routedProviderId' => 'codex',
+                    'actualExecutorId' => 'provider_routing',
+                    'sessionId' => 'esess_ctx',
+                    'workspacePath' => '/tmp/ws_ctx',
+                    'filesChanged' => ['docs/a.md'],
+                    'artifacts' => ['diff' => 'a'],
+                    'usage' => [],
+                    'checkpointId' => 'cp_ctx',
+                    'patchId' => 'patch_ctx',
+                    'patchStatus' => 'ready',
+                    'mergeReady' => true,
+                ]);
             }
         };
 

@@ -261,12 +261,25 @@ final class ApproveInspectionStepIdempotencyTest
         $executor = new class implements Executor {
             public function id(): string
             {
-                return 'noop';
+                return 'provider_routing';
             }
 
             public function execute(ExecutionRequest $request): ExecutionResult
             {
-                return ExecutionResult::succeeded($this->id(), 'ok');
+                return ExecutionResult::succeeded($this->id(), 'ok', [
+                    'providerId' => 'codex',
+                    'routedProviderId' => 'codex',
+                    'actualExecutorId' => 'provider_routing',
+                    'sessionId' => 'esess_insp',
+                    'workspacePath' => '/tmp/ws_insp',
+                    'filesChanged' => ['src/Hello.php'],
+                    'artifacts' => ['diff' => 'a'],
+                    'usage' => [],
+                    'checkpointId' => 'cp_insp',
+                    'patchId' => 'patch_insp',
+                    'patchStatus' => 'ready',
+                    'mergeReady' => true,
+                ]);
             }
         };
         $engine = new MissionEngine(
@@ -303,7 +316,10 @@ final class ApproveInspectionStepIdempotencyTest
             '2026-08-04T10:00:00Z',
             'user',
             'tester',
-            ['allowedPaths' => ['src/']],
+            [
+                'providerId' => 'codex',
+                'allowedPaths' => ['src/'],
+            ],
             null,
             new RetryPolicy(1, 0),
             TimeoutPolicy::disabled()
