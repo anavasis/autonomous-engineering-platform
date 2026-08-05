@@ -19,15 +19,43 @@ final class ResultNormalizer
         ProviderResult $result,
         array $extraContext = [],
     ): ExecutionResult {
+        $checkpoint = $session->checkpoint();
+        $workspacePath = null;
+        if (is_array($checkpoint) && is_string($checkpoint['workspacePath'] ?? null) && trim((string) $checkpoint['workspacePath']) !== '') {
+            $workspacePath = trim((string) $checkpoint['workspacePath']);
+        }
+
+        $filesChanged = $result->filesChanged();
+        if ($filesChanged === [] && is_array($extraContext['filesChanged'] ?? null)) {
+            $fromExtra = [];
+            foreach ($extraContext['filesChanged'] as $path) {
+                if (is_string($path) && trim($path) !== '') {
+                    $fromExtra[] = trim($path);
+                }
+            }
+            $filesChanged = $fromExtra;
+        }
+
         $context = array_merge([
             'providerId' => $session->providerId(),
             'sessionId' => $session->sessionId(),
-            'filesChanged' => $result->filesChanged(),
+            'workspacePath' => $workspacePath,
+            'filesChanged' => $filesChanged,
             'usage' => $session->usage()->toArray(),
-            'checkpointId' => is_array($session->checkpoint()) ? ($session->checkpoint()['id'] ?? null) : null,
+            'checkpointId' => is_array($checkpoint) ? ($checkpoint['id'] ?? null) : null,
             'artifacts' => $session->artifacts(),
-            'timeline' => $session->timeline(),
         ], $extraContext);
+
+        // Prefer session workspace path over any stale extra override when present.
+        if ($workspacePath !== null) {
+            $context['workspacePath'] = $workspacePath;
+        }
+        if ($filesChanged !== []) {
+            $context['filesChanged'] = $filesChanged;
+        }
+
+        // Do not persist huge provider timelines into run attributes.
+        unset($context['timeline']);
 
         return match ($result->status()) {
             ProviderResult::SUCCEEDED => ExecutionResult::succeeded($routerId, $result->message(), $context),

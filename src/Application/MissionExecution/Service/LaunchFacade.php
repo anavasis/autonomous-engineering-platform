@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Aep\Application\MissionExecution\Service;
 
+use Aep\Application\EngineeringExecution\Port\ExecutionSettingsStore;
 use Aep\Application\ExecutionRuntime\Handler\MissionExecutionJobHandler;
 use Aep\Application\ExecutionRuntime\Model\JobPriority;
 use Aep\Application\ExecutionRuntime\Service\JobDispatcher;
@@ -27,6 +28,7 @@ final class LaunchFacade
         private readonly MissionCommandService $missions,
         private readonly MissionEngine $engine,
         private readonly ?JobDispatcher $runtime = null,
+        private readonly ?ExecutionSettingsStore $executionSettings = null,
     ) {
     }
 
@@ -84,6 +86,7 @@ final class LaunchFacade
         $attributes['conversationId'] = $intake->conversationId();
         $attributes['planId'] = $plan->id();
         $attributes['confirmedBy'] = $actor->id();
+        $attributes['providerId'] = $this->resolveProviderId($attributes);
 
         $branch = $params['branch'] ?? ($attributes['branch'] ?? null);
 
@@ -114,6 +117,7 @@ final class LaunchFacade
         $runId = 'run_' . bin2hex(random_bytes(6));
         $attributes['retryOf'] = $attributes['priorRunId'] ?? null;
         unset($attributes['priorRunId']);
+        $attributes['providerId'] = $this->resolveProviderId($attributes);
 
         return $this->dispatchStart(
             $runId,
@@ -170,6 +174,26 @@ final class LaunchFacade
             'message' => 'Mission resume enqueued.',
             'jobId' => $job->id(),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    private function resolveProviderId(array $attributes): string
+    {
+        $explicit = $attributes['providerId'] ?? null;
+        if (is_string($explicit) && trim($explicit) !== '') {
+            return trim($explicit);
+        }
+
+        $default = $this->executionSettings?->get()['defaultProviderId'] ?? null;
+        if (is_string($default) && trim($default) !== '') {
+            return trim($default);
+        }
+
+        throw new \InvalidArgumentException(
+            'No execution provider selected. Set settings.defaultProviderId or pass providerId in launch attributes.'
+        );
     }
 
     /**

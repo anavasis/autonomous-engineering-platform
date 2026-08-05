@@ -33,13 +33,32 @@ final class RunValidationStep implements MissionStep
                 $paths = ['src/'];
             }
 
+            $validationContext = [
+                'runId' => $context->runId(),
+                'declaredPaths' => $paths,
+                'allowedPaths' => $paths,
+            ];
+            foreach ([
+                'providerId',
+                'routedProviderId',
+                'sessionId',
+                'workspacePath',
+                'filesChanged',
+                'patchId',
+                'patchStatus',
+                'mergeReady',
+                'artifacts',
+            ] as $key) {
+                $value = $context->attribute($key);
+                if ($value !== null) {
+                    $validationContext[$key] = $value;
+                }
+            }
+
             $report = $context->requireValidation()->run(new ValidationRequest(
                 $context->missionId(),
                 $context->occurredAtUtc(),
-                [
-                    'runId' => $context->runId(),
-                    'declaredPaths' => $paths,
-                ]
+                $validationContext
             ));
 
             $context->missions()->recordValidation(new RecordValidation(
@@ -50,11 +69,15 @@ final class RunValidationStep implements MissionStep
             ));
 
             if ($report->isPassed()) {
-                return StepResult::succeeded($report->reason());
+                return StepResult::succeeded($report->reason(), [
+                    'validationOutcome' => $report->outcome(),
+                    'validationReason' => $report->reason(),
+                ]);
             }
 
             return StepResult::failed($report->reason(), false, [
                 'validationOutcome' => $report->outcome(),
+                'validationReason' => $report->reason(),
             ]);
         } catch (\InvalidArgumentException $e) {
             return StepResult::rejected($e->getMessage());

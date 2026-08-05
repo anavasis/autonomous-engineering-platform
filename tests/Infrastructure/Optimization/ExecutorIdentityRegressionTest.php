@@ -117,13 +117,14 @@ final class ExecutorIdentityRegressionTest
             // Stage: Mission start via AME → Runtime (same path as resume later).
             $intake = $kernel->ame()->intake(
                 $actor,
-                "Fix a small bug in src/Example.php.\nInspection first.\ngithub:local/exec-id",
+                "Change files in src/\nInspection first.\ngithub:local/exec-id",
                 'proj_exec_id',
                 'client_exec_id_1',
             );
             Assert::same(MissionIntake::STATUS_READY, $intake['intake']['status'] ?? null);
             $intakeId = (string) $intake['intake']['id'];
             $kernel->ame()->preview($intakeId);
+            $kernel->execution()->updateSettings(['defaultProviderId' => 'local-agent']);
             $launched = $kernel->ame()->confirmAndLaunch($actor, $intakeId, true);
             Assert::true(isset($launched['missionId'], $launched['runId'], $launched['jobId']));
 

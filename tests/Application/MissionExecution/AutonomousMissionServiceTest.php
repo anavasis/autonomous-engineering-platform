@@ -56,9 +56,15 @@ final class AutonomousMissionServiceTest
             $preview = $ame->preview((string) $result['intake']['id']);
             Assert::same('aep.default_mission', $preview['workflowId'] ?? null);
 
+            $kernel->execution()->updateSettings(['defaultProviderId' => 'codex']);
             $launched = $ame->confirmAndLaunch($actor, (string) $result['intake']['id'], true);
             Assert::true(isset($launched['missionId']));
             Assert::true(isset($launched['runId']));
+            Assert::true(isset($launched['jobId']));
+
+            Assert::same(1, $kernel->runtimeWorker()->processAvailable('ame-w1', 3));
+            $run = $kernel->missions()->latestRun((string) $launched['missionId']);
+            Assert::same('codex', $run?->attributes()['providerId'] ?? null);
 
             $conversation = $ame->conversationForMission((string) $launched['missionId']);
             Assert::true(is_array($conversation));

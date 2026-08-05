@@ -546,7 +546,7 @@ final class MissionControlKernel
                 new ParameterExtractor(),
                 new ContextAssembler($missionCatalog, $memoryRepo)
             ),
-            new LaunchFacade($missionCommands, $engine, $this->jobDispatcher),
+            new LaunchFacade($missionCommands, $engine, $this->jobDispatcher, $settingsStore),
             new EngineeringMemoryService($memoryRepo),
             $this->projects
         );

@@ -13,8 +13,9 @@ use Aep\Application\Execution\Executor;
 /**
  * Additive Executor adapter.
  *
- * - No providerId selected → existing Local/SSH (legacy) behavior unchanged.
+ * - implement without providerId / defaultProviderId → rejected (fail closed).
  * - providerId selected → EngineeringExecutionOrchestrator (provider-agnostic).
+ * - non-implement legacy actions may still use DeclarativeLocalExecutor.
  */
 final class ProviderRoutingExecutor implements Executor
 {
@@ -38,6 +39,13 @@ final class ProviderRoutingExecutor implements Executor
         if (!is_string($providerId) || trim($providerId) === '') {
             $default = $this->settings?->get()['defaultProviderId'] ?? null;
             if (!is_string($default) || trim($default) === '') {
+                if ($this->isImplementAction($request)) {
+                    return ExecutionResult::rejected(
+                        self::ID,
+                        'No real execution provider is configured. Set providerId or settings.defaultProviderId before implement.'
+                    );
+                }
+
                 return $this->wrapLegacy($this->legacy->execute($request));
             }
             $providerId = trim($default);
@@ -74,6 +82,11 @@ final class ProviderRoutingExecutor implements Executor
         }
 
         return ExecutionResult::failed(self::ID, $result->message(), $ctx);
+    }
+
+    private function isImplementAction(ExecutionRequest $request): bool
+    {
+        return trim($request->action()) === 'implement';
     }
 
     private function wrapLegacy(ExecutionResult $result): ExecutionResult

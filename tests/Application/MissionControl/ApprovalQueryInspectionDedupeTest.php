@@ -85,7 +85,7 @@ final class ApprovalQueryInspectionDedupeTest
         }
     }
 
-    public function test_commit_approval_behavior_unchanged(): void
+    public function test_waiting_commit_gate_produces_exactly_one_actionable_row(): void
     {
         $h = $this->harness();
         try {
@@ -96,21 +96,35 @@ final class ApprovalQueryInspectionDedupeTest
                 $h['approvals']->list(),
                 static fn (array $i): bool => ($i['missionId'] ?? null) === 'msn_commit_1'
             ));
-            $kinds = array_map(static fn (array $i): string => (string) ($i['kind'] ?? ''), $items);
-            sort($kinds);
-            // Commit slice unchanged: merge row + waiting commit gate both remain.
-            Assert::same(['implementation_gate', 'merge'], $kinds);
-            $gate = null;
-            foreach ($items as $item) {
-                if (($item['kind'] ?? null) === 'implementation_gate') {
-                    $gate = $item;
-                }
-            }
-            Assert::true(is_array($gate));
-            Assert::same('commit', $gate['gateId'] ?? null);
+            Assert::same(1, count($items));
+            Assert::same('implementation_gate', $items[0]['kind']);
+            Assert::same('commit', $items[0]['gateId'] ?? null);
+            Assert::true(!in_array('merge', array_map(static fn (array $i): string => (string) ($i['kind'] ?? ''), $items), true));
         } finally {
             $this->removeDir($h['root']);
         }
+    }
+
+    public function test_unrelated_commit_approval_without_gate_wait_remains(): void
+    {
+        $h = $this->harness();
+        try {
+            $this->missionAwaitingCommit($h, 'msn_commit_plain');
+            $items = array_values(array_filter(
+                $h['approvals']->list(),
+                static fn (array $i): bool => ($i['missionId'] ?? null) === 'msn_commit_plain'
+            ));
+            Assert::same(1, count($items));
+            Assert::same('merge', $items[0]['kind']);
+        } finally {
+            $this->removeDir($h['root']);
+        }
+    }
+
+    public function test_commit_approval_behavior_unchanged(): void
+    {
+        // Retained name for continuity; commit gate now mirrors inspection dedupe.
+        $this->test_waiting_commit_gate_produces_exactly_one_actionable_row();
     }
 
     public function test_waiting_on_unrelated_gate_keeps_standalone_inspection_row(): void

@@ -27,7 +27,8 @@ final class ApprovalQueryService
             $id = $mission->id()->toString();
             $run = $this->missionQuery->latestRun($id);
             $state = $mission->state()->toString();
-            $waitingInspectionGate = $this->isWaitingOnInspectionGate($run);
+            $waitingInspectionGate = $this->isWaitingOnGate($run, 'inspection');
+            $waitingCommitGate = $this->isWaitingOnGate($run, 'commit');
 
             // When the engine is paused on ManualGateStep('inspection'), the gate row is
             // the single actionable approval. Do not also emit kind=inspection.
@@ -44,7 +45,8 @@ final class ApprovalQueryService
                 ];
             }
 
-            if ($state === MissionState::AWAITING_COMMIT_APPROVAL) {
+            // When waiting on ManualGateStep('commit'), emit only the gate row.
+            if ($state === MissionState::AWAITING_COMMIT_APPROVAL && !$waitingCommitGate) {
                 $queue[] = [
                     'missionId' => $id,
                     'kind' => 'merge',
@@ -85,7 +87,7 @@ final class ApprovalQueryService
         return $queue;
     }
 
-    private function isWaitingOnInspectionGate(?MissionCheckpoint $run): bool
+    private function isWaitingOnGate(?MissionCheckpoint $run, string $expectedGateId): bool
     {
         if ($run === null || $run->engineState() !== MissionRunState::WAITING) {
             return false;
@@ -96,7 +98,7 @@ final class ApprovalQueryService
             $run->planStepIds()[$run->cursorIndex()] ?? null
         );
 
-        return $gateId === 'inspection';
+        return $gateId === $expectedGateId;
     }
 
     /**

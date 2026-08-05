@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Aep\Application\MissionEngine\Step;
 
 use Aep\Application\Execution\ExecutionRequest;
+use Aep\Application\Execution\ExecutionResult;
 use Aep\Application\Mission\MissionCommandService;
 use Aep\Application\MissionEngine\MissionContext;
 use Aep\Application\MissionEngine\MissionStep;
 use Aep\Application\MissionEngine\StepResult;
 use Aep\Domain\Mission\Mission;
+use Aep\Infrastructure\Execution\DeclarativeLocalExecutor;
 
 final class ExecuteImplementationStep implements MissionStep
 {
@@ -39,7 +41,15 @@ final class ExecuteImplementationStep implements MissionStep
             ));
 
             if ($result->isSucceeded()) {
-                return StepResult::succeeded($result->message() !== '' ? $result->message() : 'Implementation executed.');
+                $evidenceError = $this->missingEvidence($result);
+                if ($evidenceError !== null) {
+                    return StepResult::failed($evidenceError, false);
+                }
+
+                return StepResult::succeeded(
+                    $result->message() !== '' ? $result->message() : 'Implementation executed.',
+                    $this->whitelistedContext($result)
+                );
             }
             if ($result->isRejected()) {
                 return StepResult::rejected($result->message());
@@ -52,6 +62,104 @@ final class ExecuteImplementationStep implements MissionStep
         } catch (\Throwable $e) {
             return StepResult::failed($e->getMessage(), true);
         }
+    }
+
+    private function missingEvidence(ExecutionResult $result): ?string
+    {
+        $ctx = $result->context();
+
+        if (($ctx['legacyBypass'] ?? false) === true) {
+            return 'Implementation success rejected: legacyBypass is not allowed for real execution.';
+        }
+
+        $actual = $ctx['actualExecutorId'] ?? $result->executorId();
+        if (is_string($actual) && trim($actual) === DeclarativeLocalExecutor::ID) {
+            return 'Implementation success rejected: declarative_local executor is not allowed.';
+        }
+
+        $providerId = $this->firstNonEmptyString([
+            $ctx['routedProviderId'] ?? null,
+            $ctx['providerId'] ?? null,
+        ]);
+        if ($providerId === null) {
+            return 'Implementation success rejected: providerId is required.';
+        }
+
+        $sessionId = $this->firstNonEmptyString([$ctx['sessionId'] ?? null]);
+        if ($sessionId === null) {
+            return 'Implementation success rejected: sessionId is required.';
+        }
+
+        $workspacePath = $this->firstNonEmptyString([$ctx['workspacePath'] ?? null]);
+        if ($workspacePath === null) {
+            return 'Implementation success rejected: workspacePath is required.';
+        }
+
+        $filesChanged = $ctx['filesChanged'] ?? null;
+        if (!is_array($filesChanged) || $filesChanged === []) {
+            return 'Implementation success rejected: filesChanged must be a non-empty list.';
+        }
+        $hasFile = false;
+        foreach ($filesChanged as $path) {
+            if (is_string($path) && trim($path) !== '') {
+                $hasFile = true;
+                break;
+            }
+        }
+        if (!$hasFile) {
+            return 'Implementation success rejected: filesChanged must contain at least one path.';
+        }
+
+        $patchId = $this->firstNonEmptyString([$ctx['patchId'] ?? null]);
+        if ($patchId === null) {
+            return 'Implementation success rejected: patchId is required.';
+        }
+
+        $patchStatus = $this->firstNonEmptyString([$ctx['patchStatus'] ?? null]);
+        if ($patchStatus === null) {
+            return 'Implementation success rejected: patchStatus is required.';
+        }
+
+        $artifacts = $ctx['artifacts'] ?? null;
+        if (!is_array($artifacts) || $artifacts === []) {
+            return 'Implementation success rejected: artifacts are required.';
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function whitelistedContext(ExecutionResult $result): array
+    {
+        $ctx = $result->context();
+        $out = [];
+
+        foreach ([
+            'providerId',
+            'routedProviderId',
+            'actualExecutorId',
+            'sessionId',
+            'workspacePath',
+            'filesChanged',
+            'artifacts',
+            'usage',
+            'checkpointId',
+            'patchId',
+            'patchStatus',
+            'mergeReady',
+        ] as $key) {
+            if (array_key_exists($key, $ctx)) {
+                $out[$key] = $ctx[$key];
+            }
+        }
+
+        if (!isset($out['actualExecutorId'])) {
+            $out['actualExecutorId'] = $result->executorId();
+        }
+
+        return $out;
     }
 
     /**
