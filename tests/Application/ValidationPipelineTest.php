@@ -63,10 +63,7 @@ final class ValidationPipelineTest
         ));
 
         Assert::true($report->isFailed());
-        Assert::true(
-            str_contains($report->reason(), 'providerId')
-            || str_contains($report->reason(), 'declaredPaths')
-        );
+        Assert::same('declarative_context: providerId is required for validation', $report->reason());
     }
 
     public function test_execution_failure_aborts(): void
