@@ -79,6 +79,58 @@ final class PatchPipelineServiceTest
         }
     }
 
+    public function test_empty_diff_validation_fails_and_is_not_merge_ready(): void
+    {
+        $root = sys_get_temp_dir() . '/aep_patch_' . bin2hex(random_bytes(4));
+        try {
+            $pipeline = $this->build($root);
+            $patch = $pipeline->createFromExecution('msn_empty', 'run_empty', '');
+            $diffCheck = null;
+            foreach ($patch->checks() as $check) {
+                if ($check->kind() === 'diff') {
+                    $diffCheck = $check;
+                }
+            }
+            Assert::true($diffCheck !== null);
+            Assert::same('failed', $diffCheck?->status());
+            $hasEmptyError = false;
+            foreach (($diffCheck?->toArray()['findings'] ?? []) as $finding) {
+                if (!is_array($finding)) {
+                    continue;
+                }
+                if (($finding['severity'] ?? null) === 'error' && ($finding['message'] ?? null) === 'Empty diff') {
+                    $hasEmptyError = true;
+                }
+            }
+            Assert::true($hasEmptyError);
+            Assert::true($patch->status() !== Patch::STATUS_MERGE_READY);
+            Assert::true($patch->mergeReadiness()->ready() !== true);
+        } finally {
+            $this->removeDir($root);
+        }
+    }
+
+    public function test_whitespace_only_diff_validation_fails_and_is_not_merge_ready(): void
+    {
+        $root = sys_get_temp_dir() . '/aep_patch_' . bin2hex(random_bytes(4));
+        try {
+            $pipeline = $this->build($root);
+            $patch = $pipeline->createFromExecution('msn_ws', 'run_ws', "  \n\t\n");
+            $diffCheck = null;
+            foreach ($patch->checks() as $check) {
+                if ($check->kind() === 'diff') {
+                    $diffCheck = $check;
+                }
+            }
+            Assert::true($diffCheck !== null);
+            Assert::same('failed', $diffCheck?->status());
+            Assert::true($patch->status() !== Patch::STATUS_MERGE_READY);
+            Assert::true($patch->mergeReadiness()->ready() !== true);
+        } finally {
+            $this->removeDir($root);
+        }
+    }
+
     /**
      * @param array<string, mixed> $settingsPatch
      */
