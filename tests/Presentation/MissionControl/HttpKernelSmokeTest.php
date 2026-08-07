@@ -261,6 +261,46 @@ final class HttpKernelSmokeTest
         Assert::true(in_array('codex', $ids, true));
     }
 
+    public function test_compose_relaxes_seccomp_and_apparmor_for_worker_only(): void
+    {
+        $repo = dirname(__DIR__, 3);
+        $compose = (string) file_get_contents($repo . '/deploy/docker-compose.yml');
+
+        Assert::true(preg_match('/^  proxy:\n(.*?)^  api:/ms', $compose, $proxyMatch) === 1);
+        Assert::true(preg_match('/^  api:\n(.*?)^  worker:/ms', $compose, $apiMatch) === 1);
+        Assert::true(preg_match('/^  worker:\n(.*?)^volumes:/ms', $compose, $workerMatch) === 1);
+
+        $proxy = $proxyMatch[1];
+        $api = $apiMatch[1];
+        $worker = $workerMatch[1];
+
+        Assert::true(str_contains($worker, 'security_opt:'));
+        Assert::true(str_contains($worker, 'seccomp=unconfined'));
+        Assert::true(str_contains($worker, 'apparmor=unconfined'));
+        Assert::same(1, substr_count($compose, 'seccomp=unconfined'));
+        Assert::same(1, substr_count($compose, 'apparmor=unconfined'));
+
+        Assert::true(!str_contains($proxy, 'security_opt'));
+        Assert::true(!str_contains($proxy, 'seccomp=unconfined'));
+        Assert::true(!str_contains($proxy, 'apparmor=unconfined'));
+
+        Assert::true(!str_contains($api, 'security_opt'));
+        Assert::true(!str_contains($api, 'seccomp=unconfined'));
+        Assert::true(!str_contains($api, 'apparmor=unconfined'));
+
+        Assert::true(!str_contains($worker, 'privileged: true'));
+        Assert::true(!str_contains($worker, 'cap_add:'));
+        Assert::true(!str_contains($worker, 'CAP_SYS_ADMIN'));
+        Assert::true(!str_contains($worker, '/var/run/docker.sock'));
+        Assert::true(!str_contains($worker, 'user: root'));
+        Assert::true(!str_contains($worker, 'pid: host'));
+        Assert::true(!str_contains($worker, 'network_mode: host'));
+
+        Assert::true(str_contains($worker, 'HOME: /var/aep/codex-home'));
+        Assert::true(str_contains($worker, 'aep_data:/var/aep/data'));
+        Assert::true(str_contains($worker, 'codex_home:/var/aep/codex-home'));
+    }
+
     public function test_execution_providers_catalog_lists_cli_providers_even_when_unavailable(): void
     {
         require_once dirname(__DIR__, 3) . '/apps/mission-control-api/src/HttpKernel.php';

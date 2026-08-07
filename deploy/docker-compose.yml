@@ -64,6 +64,12 @@ services:
       - ./optimization.json:/var/aep/deploy/optimization.json:ro
       - ./governance.json:/var/aep/deploy/governance.json:ro
       - ./execution-providers.json:/var/www/aep/deploy/execution-providers.json:ro
+    # Bubblewrap (Codex workspace-write sandbox) needs userns/mount syscalls that
+    # Docker default seccomp + AppArmor block for www-data. Worker-only override;
+    # api/proxy remain confined. Still non-privileged, no cap_add, no Docker socket.
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
 
 volumes:
   aep_data:
