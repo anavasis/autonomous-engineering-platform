@@ -135,7 +135,7 @@ final class ExecutionEventStreamServiceTest
 
         $result = $orchestrator->execute(new ExecutionRequest(
             'msn_live_1',
-            'implement',
+            'probe',
             '2026-07-31T12:00:00Z',
             ['providerId' => 'probe', 'runId' => 'run_live_1', 'objective' => 'probe live']
         ));

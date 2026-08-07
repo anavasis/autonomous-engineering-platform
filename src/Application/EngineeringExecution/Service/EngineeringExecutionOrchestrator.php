@@ -205,7 +205,30 @@ final class EngineeringExecutionOrchestrator
                 ? (string) $checkpoint['workspacePath']
                 : '';
             $diff = $this->diffs->collect($workspacePath, $allowedPaths);
-            $files = $diff['files'] !== [] ? $diff['files'] : $lastResult->filesChanged();
+
+            // Semantic empty-implement gate: provider success is insufficient without
+            // real DiffCollector evidence (non-empty collected text AND collected paths).
+            if (
+                $request->action() === 'implement'
+                && $lastResult->isSucceeded()
+                && (trim((string) $diff['text']) === '' || $diff['files'] === [])
+            ) {
+                $lastResult = new ProviderResult(
+                    ProviderResult::FAILED,
+                    'Implementation produced no collected file changes.',
+                    [],
+                    $lastResult->diffText(),
+                    $lastResult->usage(),
+                    $lastResult->rawMeta(),
+                );
+            }
+
+            // Implement uses collected evidence only; other actions keep provider fallback.
+            if ($request->action() === 'implement') {
+                $files = $diff['files'];
+            } else {
+                $files = $diff['files'] !== [] ? $diff['files'] : $lastResult->filesChanged();
+            }
             $session->usage()->setFilesChanged(count($files));
             $session->usage()->addTokens(
                 $lastResult->usage()->toArray()['inputTokens'],

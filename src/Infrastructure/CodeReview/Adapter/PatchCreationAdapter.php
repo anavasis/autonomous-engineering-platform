@@ -115,6 +115,10 @@ final class PatchCreationAdapter implements Executor
                 }
             }
 
+            if (trim($diff) === '') {
+                return $result;
+            }
+
             $patch = $this->patches->createFromExecution(
                 $request->missionId(),
                 $runId,

@@ -194,6 +194,14 @@ final class ExecuteImplementationStep implements MissionStep
             $executionContext['git'] = $git;
         }
 
+        $mission = $this->tryLoadMission($context);
+        if ($mission !== null) {
+            $objective = $mission->brief()->objective();
+            if (trim($objective) !== '') {
+                $executionContext['objective'] = $objective;
+            }
+        }
+
         return $executionContext;
     }
 

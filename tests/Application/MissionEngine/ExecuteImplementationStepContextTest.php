@@ -237,4 +237,81 @@ final class ExecuteImplementationStepContextTest
         /** @var ExecutionRequest $captured */
         Assert::same(['docs/', 'src/'], $captured->contextValue('allowedPaths'));
     }
+
+    public function test_forwards_exact_mission_brief_objective_into_execution_request(): void
+    {
+        $captured = null;
+        $executor = new class ($captured) implements Executor {
+            /** @param mixed $captured */
+            public function __construct(private mixed &$captured)
+            {
+            }
+
+            public function id(): string
+            {
+                return 'capture';
+            }
+
+            public function execute(ExecutionRequest $request): ExecutionResult
+            {
+                $this->captured = $request;
+
+                return ExecutionResult::succeeded($this->id(), 'ok', [
+                    'providerId' => 'codex',
+                    'routedProviderId' => 'codex',
+                    'actualExecutorId' => 'provider_routing',
+                    'sessionId' => 'esess_ctx_obj',
+                    'workspacePath' => '/tmp/ws_ctx_obj',
+                    'filesChanged' => ['README.md'],
+                    'artifacts' => ['diff' => 'a'],
+                    'usage' => [],
+                    'checkpointId' => 'cp_ctx_obj',
+                    'patchId' => 'patch_ctx_obj',
+                    'patchStatus' => 'ready',
+                    'mergeReady' => true,
+                ]);
+            }
+        };
+
+        $exactObjective = 'Add smoke marker with  internal  spacing and punctuation!';
+        $missions = new MissionCommandService(new InMemoryMissionRepository());
+        $missions->create(new CreateMission(
+            'msn_ctx_obj',
+            'github',
+            'anavasis/aep-codex-smoke',
+            $exactObjective,
+            'user',
+            'tester',
+            '2026-08-03T12:00:00Z'
+        ));
+        $missions->defineScope(new DefineScope('msn_ctx_obj', ['README.md'], []));
+
+        $step = new ExecuteImplementationStep();
+        $result = $step->execute(new MissionContext(
+            'run_ctx_obj',
+            'msn_ctx_obj',
+            '2026-08-03T12:00:00Z',
+            'user',
+            'tester',
+            $missions,
+            new CancellationToken(),
+            [
+                'providerId' => 'codex',
+                'allowedPaths' => ['README.md'],
+            ],
+            null,
+            new ExecutionService($executor),
+        ));
+
+        Assert::true($result->isSucceeded());
+        Assert::true($captured instanceof ExecutionRequest);
+        /** @var ExecutionRequest $captured */
+        Assert::same($exactObjective, $captured->contextValue('objective'));
+        Assert::same('codex', $captured->contextValue('providerId'));
+        Assert::same(['README.md'], $captured->contextValue('allowedPaths'));
+        $git = $captured->contextValue('git');
+        Assert::true(is_array($git));
+        Assert::same('github', $git['provider'] ?? null);
+        Assert::same('anavasis/aep-codex-smoke', $git['repository'] ?? null);
+    }
 }

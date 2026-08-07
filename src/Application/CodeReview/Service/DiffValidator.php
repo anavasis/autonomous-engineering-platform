@@ -21,8 +21,8 @@ final class DiffValidator
         $started = microtime(true);
         $findings = [];
 
-        if ($diffText === '' && $manifest->fileCount() === 0) {
-            $findings[] = ['severity' => 'warning', 'path' => null, 'message' => 'Empty diff'];
+        if (trim($diffText) === '' && $manifest->fileCount() === 0) {
+            $findings[] = ['severity' => 'error', 'path' => null, 'message' => 'Empty diff'];
         }
         if (!$manifest->allowedPathsOk()) {
             $findings[] = ['severity' => 'error', 'path' => null, 'message' => 'Diff contains paths outside allowedPaths'];

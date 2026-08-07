@@ -213,6 +213,9 @@ final class HttpKernelSmokeTest
         Assert::true(str_contains($dockerfile, 'sha256sum -c'));
         Assert::true(str_contains($dockerfile, '/usr/local/bin/codex'));
         Assert::true(str_contains($dockerfile, 'codex --version'));
+        Assert::true(str_contains($dockerfile, 'bubblewrap'));
+        Assert::true(str_contains($dockerfile, 'command -v bwrap'));
+        Assert::true(str_contains($dockerfile, 'bwrap --version'));
         Assert::true(!str_contains($dockerfile, 'npm install'));
         Assert::true(!str_contains($dockerfile, 'nodejs'));
         Assert::true(!preg_match('/curl\s+[^\n]*\|\s*sh/', $dockerfile));

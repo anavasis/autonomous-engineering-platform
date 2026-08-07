@@ -58,6 +58,7 @@ $testFiles = [
     __DIR__ . '/Infrastructure/EngineeringWorkspace/FilesystemEngineeringWorkspaceStoreTest.php',
     __DIR__ . '/Infrastructure/EngineeringWorkspace/GitWorktreeCheckoutTest.php',
     __DIR__ . '/Application/CodeReview/PatchPipelineServiceTest.php',
+    __DIR__ . '/Infrastructure/CodeReview/PatchCreationAdapterTest.php',
     __DIR__ . '/Infrastructure/CodeReview/FilesystemPatchStoreTest.php',
     __DIR__ . '/Application/Knowledge/KnowledgePipelineServiceTest.php',
     __DIR__ . '/Infrastructure/Knowledge/FilesystemKnowledgeStoreTest.php',
