@@ -1,0 +1,14 @@
+{
+  "environments": [
+    {"id": "env_development", "name": "Development", "kind": "development", "promotionOrder": 10},
+    {"id": "env_testing", "name": "Testing", "kind": "testing", "promotionOrder": 20},
+    {"id": "env_qa", "name": "QA", "kind": "qa", "promotionOrder": 30},
+    {"id": "env_staging", "name": "Staging", "kind": "staging", "promotionOrder": 40},
+    {"id": "env_production", "name": "Production", "kind": "production", "promotionOrder": 50}
+  ],
+  "targets": [
+    {"id": "tgt_dev_local", "environmentId": "env_development", "label": "Local Dev", "url": "http://localhost"},
+    {"id": "tgt_staging", "environmentId": "env_staging", "label": "Staging", "url": "https://staging.example"},
+    {"id": "tgt_prod", "environmentId": "env_production", "label": "Production", "url": "https://aep.anavasis.tech"}
+  ]
+}

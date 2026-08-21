@@ -1,0 +1,9 @@
+# Local Mission Control data root used by RuntimeAcceptanceTest — do not commit.
+/data/
+# Archived prior workspace snapshots
+/workspace.prev.*/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.sql

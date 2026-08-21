@@ -1,0 +1,47 @@
+FROM php:8.3-cli-alpine
+
+# Pinned OpenAI Codex CLI — official x86_64 musl binary (no Node/npm).
+ARG CODEX_VERSION=0.145.0
+ARG CODEX_ARCHIVE=codex-x86_64-unknown-linux-musl.tar.gz
+ARG CODEX_URL=https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/${CODEX_ARCHIVE}
+# Official GitHub Release asset digest (rust-v0.145.0 / codex-x86_64-unknown-linux-musl.tar.gz).
+ARG CODEX_SHA256=bfaf13c9ba34f2ad764e4a916c49cf7177aeba329cf0f719e2227566fc8d662a
+
+RUN apk add --no-cache ca-certificates curl git bubblewrap \
+  && curl -fsSL -o "/tmp/${CODEX_ARCHIVE}" "${CODEX_URL}" \
+  && echo "${CODEX_SHA256}  /tmp/${CODEX_ARCHIVE}" | sha256sum -c - \
+  && mkdir -p /tmp/codex-extract \
+  && tar -xzf "/tmp/${CODEX_ARCHIVE}" -C /tmp/codex-extract \
+  && BIN="$(find /tmp/codex-extract -type f \( -name 'codex' -o -name 'codex-*' \) | head -n 1)" \
+  && test -n "${BIN}" \
+  && install -m 0755 "${BIN}" /usr/local/bin/codex \
+  && rm -rf "/tmp/${CODEX_ARCHIVE}" /tmp/codex-extract \
+  && command -v bwrap \
+  && test -x "$(command -v bwrap)" \
+  && bwrap --version \
+  && /usr/local/bin/codex --version \
+  && /usr/bin/git --version \
+  && command -v git \
+  && test -x /usr/bin/git
+
+WORKDIR /var/www/aep
+
+COPY src ./src
+COPY tests/bootstrap.php ./tests/bootstrap.php
+COPY apps/mission-control-api ./apps/mission-control-api
+COPY deploy/api-router.php ./deploy/api-router.php
+COPY bin ./bin
+COPY VERSION ./VERSION
+
+# /var/aep/codex-home is seeded for the named volume (www-data owned, not world-writable).
+RUN mkdir -p /var/aep/data /var/aep/codex-home \
+  && chown -R www-data:www-data /var/aep/data /var/aep/codex-home \
+  && chmod 0750 /var/aep/codex-home \
+  && chmod +x bin/execution-worker.php
+
+ENV AEP_DATA_ROOT=/var/aep/data
+
+USER www-data
+EXPOSE 8080
+
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "apps/mission-control-api/public", "deploy/api-router.php"]

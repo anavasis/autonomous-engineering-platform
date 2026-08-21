@@ -1,0 +1,76 @@
+services:
+  proxy:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.ui
+    restart: unless-stopped
+    ports:
+      # Internal HTTP only — host Nginx + Certbot own 80/443.
+      - "127.0.0.1:${AEP_PROXY_PORT:-8088}:80"
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      AEP_DATA_ROOT: /var/aep/data
+      # Optional override only; leave unset so the image VERSION file is used.
+      AEP_VERSION: ${AEP_VERSION:-}
+      AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
+      AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
+      AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
+      AEP_EXECUTION_PROVIDERS_CONFIG: /var/www/aep/deploy/execution-providers.json
+      AEP_BOOTSTRAP_ADMIN_USERNAME: ${AEP_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      AEP_BOOTSTRAP_ADMIN_PASSWORD: ${AEP_BOOTSTRAP_ADMIN_PASSWORD:-changeme}
+      AEP_BOOTSTRAP_ADMIN_DISPLAY: ${AEP_BOOTSTRAP_ADMIN_DISPLAY:-AEP Administrator}
+      AEP_RUNTIME_LEASE_SECONDS: ${AEP_RUNTIME_LEASE_SECONDS:-60}
+    volumes:
+      - aep_data:/var/aep/data
+      - ./agents.json:/var/aep/deploy/agents.json:ro
+      - ./optimization.json:/var/aep/deploy/optimization.json:ro
+      - ./governance.json:/var/aep/deploy/governance.json:ro
+      - ./execution-providers.json:/var/www/aep/deploy/execution-providers.json:ro
+    expose:
+      - "8080"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    command: ["php", "bin/execution-worker.php"]
+    environment:
+      AEP_DATA_ROOT: /var/aep/data
+      # Optional override only; leave unset so the image VERSION file is used.
+      AEP_VERSION: ${AEP_VERSION:-}
+      # Persistent Codex CLI home (Sign in with ChatGPT credentials under ~/.codex).
+      HOME: /var/aep/codex-home
+      AEP_AGENTS_CONFIG: ${AEP_AGENTS_CONFIG:-/var/aep/deploy/agents.json}
+      AEP_OPTIMIZATION_CONFIG: ${AEP_OPTIMIZATION_CONFIG:-/var/aep/deploy/optimization.json}
+      AEP_GOVERNANCE_CONFIG: ${AEP_GOVERNANCE_CONFIG:-/var/aep/deploy/governance.json}
+      AEP_EXECUTION_PROVIDERS_CONFIG: /var/www/aep/deploy/execution-providers.json
+      AEP_BOOTSTRAP_ADMIN_USERNAME: ${AEP_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      AEP_BOOTSTRAP_ADMIN_PASSWORD: ${AEP_BOOTSTRAP_ADMIN_PASSWORD:-changeme}
+      AEP_BOOTSTRAP_ADMIN_DISPLAY: ${AEP_BOOTSTRAP_ADMIN_DISPLAY:-AEP Administrator}
+      AEP_RUNTIME_LEASE_SECONDS: ${AEP_RUNTIME_LEASE_SECONDS:-60}
+      AEP_RUNTIME_WORKER_ID: ${AEP_RUNTIME_WORKER_ID:-worker-1}
+    volumes:
+      - aep_data:/var/aep/data
+      - codex_home:/var/aep/codex-home
+      - ./agents.json:/var/aep/deploy/agents.json:ro
+      - ./optimization.json:/var/aep/deploy/optimization.json:ro
+      - ./governance.json:/var/aep/deploy/governance.json:ro
+      - ./execution-providers.json:/var/www/aep/deploy/execution-providers.json:ro
+    # Bubblewrap (Codex workspace-write sandbox) needs userns/mount syscalls that
+    # Docker default seccomp + AppArmor block for www-data. Worker-only override;
+    # api/proxy remain confined. Still non-privileged, no cap_add, no Docker socket.
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+
+volumes:
+  aep_data:
+  codex_home:

@@ -1,0 +1,107 @@
+{
+  "providers": [
+    {
+      "id": "local-agent",
+      "type": "local-agent",
+      "enabled": true,
+      "displayName": "Local Agent"
+    },
+    {
+      "id": "cursor",
+      "type": "cursor-cli",
+      "enabled": true,
+      "displayName": "Cursor Agent",
+      "options": {
+        "simulate": false,
+        "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": true,
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
+          "tools": true,
+          "maxContextTokens": 200000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "codex",
+      "type": "codex-cli",
+      "enabled": true,
+      "displayName": "OpenAI Codex",
+      "options": {
+        "simulate": false,
+        "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": false,
+        "args": ["exec", "--sandbox", "workspace-write"],
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
+          "tools": true,
+          "maxContextTokens": 128000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "claude-code",
+      "type": "claude-code-cli",
+      "enabled": true,
+      "displayName": "Claude Code",
+      "options": {
+        "simulate": false,
+        "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": false,
+        "args": ["-p"],
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
+          "tools": true,
+          "maxContextTokens": 200000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "gemini-cli",
+      "type": "gemini-cli",
+      "enabled": true,
+      "displayName": "Gemini CLI",
+      "options": {
+        "simulate": false,
+        "binary": "",
+        "useRepoCwd": true,
+        "promptViaStdin": false,
+        "args": ["-p"],
+        "capabilities": {
+          "streaming": true,
+          "cancel": true,
+          "resume": true,
+          "workspaceMount": true,
+          "diffExport": true,
+          "tools": true,
+          "maxContextTokens": 1000000,
+          "costReporting": true
+        }
+      }
+    },
+    {
+      "id": "legacy-local",
+      "type": "legacy-local",
+      "enabled": true,
+      "displayName": "Legacy Local Executor"
+    }
+  ]
+}

@@ -12,7 +12,7 @@ use Aep\Infrastructure\Validation\DeclarativeContextValidationStep;
 use Tests\Support\Assert;
 
 /**
- * ORCH-R5 validation pipeline coverage.
+ * ORCH-R5 validation pipeline coverage (updated for real execution evidence).
  */
 final class ValidationPipelineTest
 {
@@ -26,7 +26,7 @@ final class ValidationPipelineTest
         $report = $pipeline->run(new ValidationRequest(
             'msn_val_1',
             '2026-07-30T12:00:00Z',
-            ['declaredPaths' => ['src/Domain/Mission/Mission.php']]
+            $this->evidence(['src/Domain/Mission/Mission.php'])
         ));
 
         Assert::true($report->isPassed());
@@ -45,7 +45,7 @@ final class ValidationPipelineTest
         $report = $pipeline->run(new ValidationRequest(
             'msn_val_2',
             '2026-07-30T12:00:00Z',
-            ['declaredPaths' => ['src/Domain/Mission/Mission.php']]
+            $this->evidence(['src/Domain/Mission/Mission.php'])
         ));
 
         Assert::true($report->isFailed());
@@ -63,7 +63,7 @@ final class ValidationPipelineTest
         ));
 
         Assert::true($report->isFailed());
-        Assert::true(str_contains($report->reason(), 'declaredPaths must be a non-empty list'));
+        Assert::same('declarative_context: providerId is required for validation', $report->reason());
     }
 
     public function test_execution_failure_aborts(): void
@@ -77,7 +77,7 @@ final class ValidationPipelineTest
             $pipeline->run(new ValidationRequest(
                 'msn_val_4',
                 '2026-07-30T12:00:00Z',
-                ['declaredPaths' => ['src/Domain/Mission/Mission.php']]
+                (new self())->evidence(['src/Domain/Mission/Mission.php'])
             ));
         });
     }
@@ -111,6 +111,25 @@ final class ValidationPipelineTest
         Assert::same('a', $report->outcomes()[0]->stepId());
         Assert::same('b', $report->outcomes()[1]->stepId());
         Assert::same('c', $report->outcomes()[2]->stepId());
+    }
+
+    /**
+     * @param list<string> $paths
+     * @return array<string, mixed>
+     */
+    private function evidence(array $paths): array
+    {
+        return [
+            'declaredPaths' => $paths,
+            'providerId' => 'codex',
+            'sessionId' => 'esess_val',
+            'workspacePath' => '/tmp/ws_val',
+            'filesChanged' => $paths,
+            'patchId' => 'patch_val',
+            'patchStatus' => 'ready',
+            'mergeReady' => true,
+            'artifacts' => ['diff' => 'a'],
+        ];
     }
 }
 

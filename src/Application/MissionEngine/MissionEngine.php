@@ -266,6 +266,8 @@ final class MissionEngine
             ));
 
             if ($result->isSucceeded()) {
+                $attributes = $this->mergeStepContext($attributes, $result->context());
+                $context = $context->withMergedAttributes($attributes);
                 $cursor++;
                 $progress = $this->progress($cursor, $plan->size());
                 $checkpoint = new MissionCheckpoint(
@@ -286,6 +288,7 @@ final class MissionEngine
             }
 
             if ($result->isWaiting()) {
+                $attributes = $this->mergeStepContext($attributes, $result->context());
                 return $this->persistState(
                     $checkpoint,
                     $timeline,
@@ -334,6 +337,7 @@ final class MissionEngine
             }
 
             if ($result->isRejected()) {
+                $attributes = $this->mergeStepContext($attributes, $result->context());
                 return $this->persistState(
                     $checkpoint,
                     $timeline,
@@ -378,6 +382,7 @@ final class MissionEngine
                 continue;
             }
 
+            $attributes = $this->mergeStepContext($attributes, $result->context());
             return $this->persistState(
                 $checkpoint,
                 $timeline,
@@ -502,6 +507,48 @@ final class MissionEngine
         }
 
         return (int) floor(($completedSteps / $total) * 100);
+    }
+
+    /**
+     * Merge StepResult context into durable checkpoint attributes.
+     * Protected workflow/control keys are never overwritten by step context.
+     *
+     * @param array<string, mixed> $attributes
+     * @param array<string, mixed> $stepContext
+     * @return array<string, mixed>
+     */
+    private function mergeStepContext(array $attributes, array $stepContext): array
+    {
+        if ($stepContext === []) {
+            return $attributes;
+        }
+
+        $protected = [
+            'workflowId' => true,
+            'workflowVersion' => true,
+            'allowedPaths' => true,
+            'nonGoals' => true,
+            'executionAction' => true,
+            'intakeId' => true,
+            'conversationId' => true,
+            'planId' => true,
+            'confirmedBy' => true,
+        ];
+
+        foreach ($stepContext as $key => $value) {
+            if (!is_string($key) || $key === '') {
+                continue;
+            }
+            if (isset($protected[$key])) {
+                continue;
+            }
+            if (str_starts_with($key, 'gate.')) {
+                continue;
+            }
+            $attributes[$key] = $value;
+        }
+
+        return $attributes;
     }
 
     private function toResult(

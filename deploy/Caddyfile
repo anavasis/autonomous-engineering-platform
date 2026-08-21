@@ -1,0 +1,21 @@
+# Internal HTTP edge only.
+# Host Nginx + Certbot terminate TLS and reverse-proxy to 127.0.0.1:8088.
+:80 {
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		root * /srv/ui
+		try_files {path} /index.html
+		file_server
+	}
+}

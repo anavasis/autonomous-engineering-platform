@@ -1,0 +1,148 @@
+{
+  "name": "hello-notes",
+  "description": "Real autonomous engineering project: REST notes app with SQLite, CRUD, search, Docker, README, and unit tests — generated through AEP Runtime + Engineering Execution.",
+  "requirements": [
+    "REST backend",
+    "Frontend UI",
+    "SQLite",
+    "CRUD Notes",
+    "Search",
+    "Docker support",
+    "README",
+    "Unit tests"
+  ],
+  "expectedArtifacts": [
+    "README.md",
+    "Dockerfile",
+    "docker-compose.yml",
+    "backend/",
+    "frontend/",
+    "backend/db/schema.ddl",
+    "backend/tests/NotesTest.php"
+  ],
+  "validationRules": [
+    {
+      "id": "project_started",
+      "type": "project_started",
+      "description": "Mission and run were created"
+    },
+    {
+      "id": "project_completed",
+      "type": "project_completed",
+      "params": {
+        "acceptedStates": ["completed", "waiting"]
+      },
+      "description": "Mission engine reached a successful post-drive state"
+    },
+    {
+      "id": "runtime_status",
+      "type": "runtime_status",
+      "params": {
+        "accepted": ["completed"]
+      },
+      "description": "Runtime job completed"
+    },
+    {
+      "id": "execution_successful",
+      "type": "execution_successful",
+      "description": "Runtime execution succeeded without engine failure"
+    },
+    {
+      "id": "workspace_created",
+      "type": "directory_exists",
+      "params": { "path": "." },
+      "description": "Evaluation workspace root exists"
+    },
+    {
+      "id": "files_generated",
+      "type": "file_exists",
+      "params": { "path": "README.md" },
+      "description": "Generated files present (README as generation marker)"
+    },
+    {
+      "id": "readme_exists",
+      "type": "file_exists",
+      "params": { "path": "README.md" }
+    },
+    {
+      "id": "docker_compose_exists",
+      "type": "file_exists",
+      "params": { "path": "docker-compose.yml" },
+      "description": "Docker support present (compose). Dockerfile asserted by RuntimeAcceptanceTest on generated workspace."
+    },
+    {
+      "id": "backend_exists",
+      "type": "directory_exists",
+      "params": { "path": "backend" }
+    },
+    {
+      "id": "frontend_exists",
+      "type": "directory_exists",
+      "params": { "path": "frontend" }
+    },
+    {
+      "id": "sqlite_config_exists",
+      "type": "file_exists",
+      "params": { "path": "backend/db/schema.ddl" }
+    },
+    {
+      "id": "tests_exist",
+      "type": "file_exists",
+      "params": { "path": "backend/tests/NotesTest.php" }
+    },
+    {
+      "id": "tests_executed",
+      "type": "tests_executed"
+    },
+    {
+      "id": "build_completed",
+      "type": "build_completed"
+    },
+    {
+      "id": "artifact_generated",
+      "type": "artifact_generated",
+      "params": { "minCount": 0 },
+      "description": "Artifact collection observed (min 0 for platform smoke; runtime asserts artifacts separately)"
+    },
+    {
+      "id": "execution_duration",
+      "type": "execution_duration",
+      "params": { "maxSeconds": 600 }
+    }
+  ],
+  "successCriteria": {
+    "requireAllRules": false,
+    "requiredRuleIds": [
+      "project_started",
+      "project_completed",
+      "runtime_status",
+      "execution_successful"
+    ],
+    "runtimeAcceptanceRuleIds": [
+      "project_started",
+      "project_completed",
+      "runtime_status",
+      "execution_successful",
+      "workspace_created",
+      "files_generated",
+      "readme_exists",
+      "docker_compose_exists",
+      "backend_exists",
+      "frontend_exists",
+      "sqlite_config_exists",
+      "tests_exist",
+      "tests_executed",
+      "build_completed"
+    ]
+  },
+  "execution": {
+    "prompt": "Build a complete Hello Notes software project end-to-end through autonomous engineering.\n\nRequirements:\n- REST backend\n- Frontend UI\n- SQLite\n- CRUD Notes\n- Search\n- Docker support\n- README\n- Unit tests\n\nDeliver a working project layout with backend API, frontend UI, SQLite schema, Dockerfile, docker-compose, README, and tests.\nInspection first.\nDo not modify unrelated repositories.",
+    "projectId": "proj_hello_notes",
+    "projectSlug": "hello-notes",
+    "projectDisplayName": "Hello Notes",
+    "provider": "github",
+    "repository": "local/hello-notes",
+    "timeoutSeconds": 120,
+    "clarifyAnswers": {}
+  }
+}

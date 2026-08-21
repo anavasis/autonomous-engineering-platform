@@ -1,0 +1,26 @@
+{
+    "version": "1.7.2",
+    "project": "hello-notes",
+    "missionId": "msn_a4e584d95cc9",
+    "runId": "run_8c4b35a9433f",
+    "jobId": "job_db516e359510cc1a",
+    "sessionId": "esess_10d6d5b77bd77de6",
+    "engineState": "waiting",
+    "runtimeStatus": "completed",
+    "providerId": "hello-notes-agent",
+    "dataRoot": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/data",
+    "generatedWorkspace": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/workspace",
+    "engineeringWorkspace": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/data\/workspaces\/ewsp_2e11c28bc77597dd",
+    "acceptanceReport": "\/workspace\/examples\/acceptance\/hello-notes-runtime\/reports\/arpt_2fd5bdaaeae58677.json",
+    "stages": {
+        "ame_launch": true,
+        "runtime_completed": true,
+        "engineering_execution": true,
+        "artifacts": true,
+        "workspace_preserved": true,
+        "acceptance_validation": true,
+        "acceptance_report": true
+    },
+    "success": true,
+    "createdAtUtc": "2026-08-03T05:56:44Z"
+}

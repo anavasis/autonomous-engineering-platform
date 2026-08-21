@@ -52,3 +52,9 @@ temp/
 *.db
 *.sql
 dump.sql
+
+# AEP Mission Control local runtime
+var/
+apps/mission-control-ui/dist/
+apps/mission-control-ui/node_modules/
+deploy/.env

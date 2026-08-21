@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 48" fill="none">
+  <rect x="2" y="4" width="40" height="40" rx="10" fill="#121821" stroke="#243041"/>
+  <path d="M12 34L22 14L32 34H12Z" stroke="#5EEAD4" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="22" cy="28" r="2.4" fill="#F59E0B"/>
+  <text x="54" y="31" fill="#E8EEF7" font-family="Sora, sans-serif" font-size="18" font-weight="600" letter-spacing="0.02em">AEP Mission Control</text>
+</svg>
